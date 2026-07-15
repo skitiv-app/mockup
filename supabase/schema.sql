@@ -55,8 +55,8 @@ create policy "owner insert" on public.mockups
   );
 
 create policy "org update" on public.mockups
-  for update using (org_id = auth.jwt()->>'org_id')
-  with check (org_id = auth.jwt()->>'org_id');
+  for update using (org_id = auth.jwt()->>'org_id' and public.is_owner())
+  with check (org_id = auth.jwt()->>'org_id' and public.is_owner());
 
 create policy "org delete" on public.mockups
   for delete using (org_id = auth.jwt()->>'org_id');

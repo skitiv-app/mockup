@@ -331,6 +331,10 @@ export default function App() {
   }
 
   function removeMockup(id: string) {
+    if (!isOwner) {
+      flash("Only owners can remove mockups.");
+      return;
+    }
     const target = mockups.find((m) => m.id === id);
     setMockups((list) => list.filter((m) => m.id !== id));
     setSelected((s) => {
@@ -352,9 +356,10 @@ export default function App() {
     if (!target) return;
     const willLock = !target.locked;
 
-    // Members may not unlock (server enforces this too via a trigger).
-    if (!willLock && !isOwner) {
-      flash("Members can't unlock a mockup.");
+    // Members are read-only: only owners can lock/unlock (server enforces via
+    // RLS + trigger).
+    if (!isOwner) {
+      flash("Only owners can lock or change mockups.");
       return;
     }
 
@@ -396,10 +401,12 @@ export default function App() {
   }
 
   function setTone(id: string, tone: "light" | "dark") {
+    if (!isOwner) return;
     setMockups((list) => list.map((m) => (m.id === id ? { ...m, tone } : m)));
   }
 
   function setBrand(id: string, brand: Brand) {
+    if (!isOwner) return;
     setMockups((list) => list.map((m) => (m.id === id ? { ...m, brand } : m)));
   }
 
@@ -804,7 +811,7 @@ export default function App() {
                                 onPickShape={setShape}
                                 onToggleLock={() => toggleLock(m.id)}
                                 onRemove={() => removeMockup(m.id)}
-                                canUnlock={isOwner}
+                                isOwner={isOwner}
                               />
                             ))}
                           </div>

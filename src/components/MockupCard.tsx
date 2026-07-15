@@ -95,7 +95,7 @@ interface Props {
   onPickShape: (shape: ShapeKey) => void;
   onToggleLock: () => void;
   onRemove: () => void;
-  canUnlock: boolean; // members can't unlock a locked mockup
+  isOwner: boolean; // members are read-only: no add/remove/tone/brand/lock
 }
 
 type DragMode = null | "move" | "resize" | "rotate";
@@ -122,7 +122,7 @@ export default function MockupCard({
   onPickShape,
   onToggleLock,
   onRemove,
-  canUnlock,
+  isOwner,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   // The stage now fills the card, so we measure its real width and derive the
@@ -266,22 +266,26 @@ export default function MockupCard({
           </span>
         </div>
         <div className="head-actions">
-          <button
-            className="tone-btn brand-btn"
-            onClick={() => onSetBrand(otherBrand)}
-            title={`Brand: ${brand} — click to move to ${otherBrand}`}
-          >
-            👕 {brandShort}
-          </button>
-          <button
-            className="tone-btn"
-            onClick={() => onSetTone(garment === "light" ? "dark" : "light")}
-            title={`This mockup is ${garment} — click to move it to the ${
-              garment === "light" ? "Dark" : "Light"
-            } group`}
-          >
-            {garment === "light" ? "☀" : "🌙"}
-          </button>
+          {isOwner && (
+            <button
+              className="tone-btn brand-btn"
+              onClick={() => onSetBrand(otherBrand)}
+              title={`Brand: ${brand} — click to move to ${otherBrand}`}
+            >
+              👕 {brandShort}
+            </button>
+          )}
+          {isOwner && (
+            <button
+              className="tone-btn"
+              onClick={() => onSetTone(garment === "light" ? "dark" : "light")}
+              title={`This mockup is ${garment} — click to move it to the ${
+                garment === "light" ? "Dark" : "Light"
+              } group`}
+            >
+              {garment === "light" ? "☀" : "🌙"}
+            </button>
+          )}
           <button
             className="tone-btn"
             onClick={onCopy}
@@ -293,20 +297,22 @@ export default function MockupCard({
           <button
             className={"tone-btn" + (locked ? " lock-on" : "")}
             onClick={onToggleLock}
-            disabled={locked && !canUnlock}
+            disabled={!isOwner}
             title={
-              locked
-                ? canUnlock
-                  ? "Unlock to edit placements"
-                  : "Only an owner can unlock"
+              !isOwner
+                ? "Only an owner can lock/unlock"
+                : locked
+                ? "Unlock to edit placements"
                 : "Lock all placements"
             }
           >
             {locked ? "🔒" : "🔓"}
           </button>
-          <button className="icon-btn" onClick={onRemove} title="Remove mockup">
-            ✕
-          </button>
+          {isOwner && (
+            <button className="icon-btn" onClick={onRemove} title="Remove mockup">
+              ✕
+            </button>
+          )}
         </div>
       </div>
 
