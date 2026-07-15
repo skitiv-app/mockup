@@ -1,7 +1,7 @@
 import {
   json, verifyAuth, userEmail, isSuperAdmin, supaRest, mgmt, slug,
   findOrCreateUser, passwordTicket, readJson,
-} from "../_lib/util";
+} from "../_lib/util.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") return json(res, 405, { error: "method not allowed" });

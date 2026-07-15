@@ -1,4 +1,4 @@
-import { json, verifyAuth, userEmail, isSuperAdmin, supaRest, queryParam } from "../_lib/util";
+import { json, verifyAuth, userEmail, isSuperAdmin, supaRest, queryParam } from "../_lib/util.js";
 
 export default async function handler(req: any, res: any) {
   const claims = await verifyAuth(req);

@@ -1,4 +1,4 @@
-import { json, supaRest, slug, readJson } from "./_lib/util";
+import { json, supaRest, slug, readJson } from "./_lib/util.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") return json(res, 405, { error: "method not allowed" });
