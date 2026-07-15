@@ -18,6 +18,9 @@ export function fitInBox(box: Box, designW: number, designH: number) {
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
+    // Remote images (Supabase signed URLs) need CORS enabled or canvas export
+    // taints. Data URLs don't, so only set it for http(s).
+    if (!src.startsWith("data:")) img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
     img.onerror = reject;
     img.src = src;

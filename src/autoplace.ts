@@ -3,6 +3,7 @@ import type { Box, ShapePreset } from "./types";
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((res, rej) => {
     const i = new Image();
+    if (!src.startsWith("data:")) i.crossOrigin = "anonymous";
     i.onload = () => res(i);
     i.onerror = rej;
     i.src = src;

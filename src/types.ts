@@ -35,6 +35,9 @@ export interface Mockup {
   placements: Partial<Record<ShapeKey, Box[]>>;
   // When locked, all placements are frozen and can't be dragged.
   locked?: boolean;
+  // Storage path in Supabase ("{org_id}/{id}.png") once the mockup is saved.
+  // Present means the image is already uploaded (don't re-upload on lock).
+  imagePath?: string;
 }
 
 export interface DesignAsset {

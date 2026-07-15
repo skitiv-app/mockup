@@ -18,6 +18,15 @@ import {
 } from "./render";
 import { detectShirtBoxes } from "./autoplace";
 import MockupCard from "./components/MockupCard";
+import { useAuth0 } from "@auth0/auth0-react";
+import { useSupabase } from "./auth/SupabaseProvider";
+import { useIsOwner } from "./auth/useRole";
+import {
+  loadMockupsFromDb,
+  saveMockupToDb,
+  setMockupLocked,
+  deleteMockupFromDb,
+} from "./mockupsRepo";
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
@@ -52,6 +61,15 @@ export default function App() {
   const [autoShapeNote, setAutoShapeNote] = useState<ShapeKey | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  // Cloud (Supabase) wiring. When not configured, `supabase` is null and the
+  // app falls back to local-only IndexedDB behaviour.
+  const supabase = useSupabase();
+  const { user } = useAuth0();
+  const orgId = (user as any)?.org_id as string | undefined;
+  const userId = (user?.sub as string | undefined) ?? null;
+  const isOwner = useIsOwner();
+  const cloud = supabase && orgId ? { supabase, orgId } : null;
+
   function flash(msg: string) {
     setToast(msg);
     window.setTimeout(() => setToast((t) => (t === msg ? null : t)), 3000);
@@ -63,13 +81,17 @@ export default function App() {
     let cancelled = false;
     loadState().then((s) => {
       if (cancelled) return;
-      setMockups(s.mockups);
+      // If the cloud is on, mockups come from Supabase (loaded in the effect
+      // below); otherwise use the local cache.
+      if (!cloud) {
+        setMockups(s.mockups);
+        setSelected(new Set(s.mockups.map((m) => m.id)));
+      }
       setPresets(s.presets);
       setDesign(s.design);
       setShape(s.settings.shape);
       setRealism(s.settings.realism);
       setGroupName(s.settings.groupName);
-      setSelected(new Set(s.mockups.map((m) => m.id)));
       loaded.current = true;
     });
     return () => {
@@ -77,14 +99,34 @@ export default function App() {
     };
   }, []);
 
+  // When the cloud is configured, mockups live in Supabase. Load the org's
+  // saved mockups and use them as the source of truth (local list is replaced).
+  useEffect(() => {
+    if (!cloud) return;
+    let cancelled = false;
+    loadMockupsFromDb(cloud.supabase)
+      .then((remote) => {
+        if (cancelled) return;
+        setMockups(remote);
+        setSelected(new Set(remote.map((m) => m.id)));
+      })
+      .catch((e) => flash("Couldn't load cloud mockups: " + (e?.message ?? e)));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cloud?.supabase, cloud?.orgId]);
+
   // Keep the latest state in a ref so we can flush it synchronously on close.
-  const latest = useRef({ mockups, presets, design, shape, realism, groupName });
-  latest.current = { mockups, presets, design, shape, realism, groupName };
+  const latest = useRef({ mockups, presets, design, shape, realism, groupName, cloudActive: false });
+  latest.current = { mockups, presets, design, shape, realism, groupName, cloudActive: !!cloud };
   const flush = () => {
     if (!loaded.current) return;
     const l = latest.current;
     saveState({
-      mockups: l.mockups,
+      // With the cloud on, mockups live in Supabase; don't cache them locally
+      // (signed URLs expire). Presets/design/settings stay local for convenience.
+      mockups: l.cloudActive ? [] : l.mockups,
       presets: l.presets,
       design: l.design,
       settings: {
@@ -289,21 +331,37 @@ export default function App() {
   }
 
   function removeMockup(id: string) {
+    const target = mockups.find((m) => m.id === id);
     setMockups((list) => list.filter((m) => m.id !== id));
     setSelected((s) => {
       const next = new Set(s);
       next.delete(id);
       return next;
     });
+    if (cloud && target?.imagePath) {
+      deleteMockupFromDb(cloud.supabase, target).catch((e) =>
+        flash("Cloud delete failed: " + (e?.message ?? "error"))
+      );
+    }
   }
 
   // Lock freezes all placements. When locking, fill in any shape the user
   // hasn't placed yet with its default box, so all three are saved concretely.
-  function toggleLock(id: string) {
+  async function toggleLock(id: string) {
+    const target = mockups.find((m) => m.id === id);
+    if (!target) return;
+    const willLock = !target.locked;
+
+    // Members may not unlock (server enforces this too via a trigger).
+    if (!willLock && !isOwner) {
+      flash("Members can't unlock a mockup.");
+      return;
+    }
+
+    let updated: Mockup | null = null;
     setMockups((list) =>
       list.map((m) => {
         if (m.id !== id) return m;
-        const willLock = !m.locked;
         let placements = m.placements;
         if (willLock) {
           placements = { ...m.placements };
@@ -312,9 +370,29 @@ export default function App() {
               placements[k] = [defaultBox(m, presets[k])];
           }
         }
-        return { ...m, locked: willLock, placements };
+        updated = { ...m, locked: willLock, placements };
+        return updated;
       })
     );
+
+    // Persist to the cloud when configured. Locking uploads + upserts; the
+    // owner unlocking flips the flag back.
+    if (cloud && updated) {
+      try {
+        if (willLock) {
+          const path = await saveMockupToDb(cloud.supabase, updated, cloud.orgId, userId);
+          setMockups((list) =>
+            list.map((m) => (m.id === id ? { ...m, imagePath: path } : m))
+          );
+          flash("Mockup locked & saved to the cloud ✓");
+        } else {
+          await setMockupLocked(cloud.supabase, id, false);
+          flash("Mockup unlocked.");
+        }
+      } catch (e: any) {
+        flash("Cloud save failed: " + (e?.message ?? "error"));
+      }
+    }
   }
 
   function setTone(id: string, tone: "light" | "dark") {
