@@ -8,6 +8,9 @@ export function loadImageCached(src: string): Promise<HTMLImageElement> {
   if (hit && hit.complete) return Promise.resolve(hit);
   return new Promise((res, rej) => {
     const img = new Image();
+    // Remote images (Supabase signed URLs) must be CORS-enabled or the preview
+    // canvas taints and getImageData throws — which silently hid the design.
+    if (!src.startsWith("data:")) img.crossOrigin = "anonymous";
     img.onload = () => {
       imgCache.set(src, img);
       res(img);
