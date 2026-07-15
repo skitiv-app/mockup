@@ -363,26 +363,23 @@ export default function App() {
       return;
     }
 
-    let updated: Mockup | null = null;
-    setMockups((list) =>
-      list.map((m) => {
-        if (m.id !== id) return m;
-        let placements = m.placements;
-        if (willLock) {
-          placements = { ...m.placements };
-          for (const k of SHAPE_KEYS) {
-            if (!placements[k]?.length)
-              placements[k] = [defaultBox(m, presets[k])];
-          }
-        }
-        updated = { ...m, locked: willLock, placements };
-        return updated;
-      })
-    );
+    // Build the updated mockup synchronously (NOT inside the setState updater —
+    // React runs that callback lazily, so reading it back was unreliable and
+    // sometimes skipped the save).
+    let placements = target.placements;
+    if (willLock) {
+      placements = { ...target.placements };
+      for (const k of SHAPE_KEYS) {
+        if (!placements[k]?.length)
+          placements[k] = [defaultBox(target, presets[k])];
+      }
+    }
+    const updated: Mockup = { ...target, locked: willLock, placements };
+    setMockups((list) => list.map((m) => (m.id === id ? updated : m)));
 
     // Persist to the cloud when configured. Locking uploads + upserts; the
     // owner unlocking flips the flag back.
-    if (cloud && updated) {
+    if (cloud) {
       try {
         if (willLock) {
           const path = await saveMockupToDb(cloud.supabase, updated, cloud.orgId, userId);
@@ -397,6 +394,8 @@ export default function App() {
       } catch (e: any) {
         flash("Cloud save failed: " + (e?.message ?? "error"));
       }
+    } else {
+      flash(willLock ? "Locked (local only — no cloud configured)" : "Unlocked.");
     }
   }
 
