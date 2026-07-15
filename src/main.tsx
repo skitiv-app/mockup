@@ -5,10 +5,12 @@ import AuthProvider from "./auth/AuthProvider";
 import AuthGate from "./auth/AuthGate";
 import OrgGate from "./auth/OrgGate";
 import { SupabaseProvider } from "./auth/SupabaseProvider";
+import { Analytics } from "@vercel/analytics/react";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
+    <Analytics />
     <AuthProvider>
       <AuthGate>
         <OrgGate>
