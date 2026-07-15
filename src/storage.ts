@@ -23,7 +23,7 @@ export interface PersistedState {
 const DEFAULT_SETTINGS: PersistedSettings = {
   shape: "short",
   realism: 0.6,
-  groupName: "mockup",
+  groupName: "group",
 };
 
 // Older versions stored a single Box per shape instead of an array. Wrap any

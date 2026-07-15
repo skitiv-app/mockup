@@ -53,7 +53,7 @@ export default function App() {
   const [realism, setRealism] = useState(0.6);
   const [toneFilter, setToneFilter] = useState<"all" | "light" | "dark">("all");
   const [brandFilter, setBrandFilter] = useState<"all" | Brand>("all");
-  const [groupName, setGroupName] = useState("mockup");
+  const [groupName, setGroupName] = useState("group");
   const [exporting, setExporting] = useState(false);
   const [autoBusy, setAutoBusy] = useState(false);
   // Which mockups are ticked for export. New mockups start selected.
@@ -441,6 +441,7 @@ export default function App() {
   }
 
   function updatePreset(key: ShapeKey, patch: Partial<ShapePreset>) {
+    if (!isOwner) return;
     setPresets((p) => ({ ...p, [key]: { ...p[key], ...patch } }));
   }
 
@@ -463,7 +464,7 @@ export default function App() {
 
     // Files are named "<group>-1.png", "<group>-2.png", ... in selection order,
     // zero-padded so they sort correctly in the folder.
-    const base = (groupName.trim() || "mockup").replace(/[\\/:*?"<>|]+/g, "-");
+    const base = (groupName.trim() || "group").replace(/[\\/:*?"<>|]+/g, "-");
     const pad = String(targets.length).length;
 
     setExporting(true);
@@ -547,6 +548,7 @@ export default function App() {
               <input
                 type="number"
                 value={presets[shape].w}
+                disabled={!isOwner}
                 onChange={(e) =>
                   updatePreset(shape, { w: Number(e.target.value) || 1 })
                 }
@@ -555,6 +557,7 @@ export default function App() {
               <input
                 type="number"
                 value={presets[shape].h}
+                disabled={!isOwner}
                 onChange={(e) =>
                   updatePreset(shape, { h: Number(e.target.value) || 1 })
                 }
@@ -597,6 +600,7 @@ export default function App() {
               max={1}
               step={0.05}
               value={realism}
+              disabled={!isOwner}
               onChange={(e) => setRealism(Number(e.target.value))}
             />
           </label>
@@ -617,11 +621,11 @@ export default function App() {
             <input
               type="text"
               value={groupName}
-              placeholder="mockup"
+              placeholder="group"
               onChange={(e) => setGroupName(e.target.value)}
             />
             <span className="name-preview">
-              {(groupName.trim() || "mockup")}-1.png
+              {(groupName.trim() || "group")}-1.png
             </span>
           </div>
           <button
@@ -642,12 +646,12 @@ export default function App() {
           {hasFolderApi ? (
             <p className="hint">
               Pick a folder once — all ticked mockups save straight into it as
-              numbered PNGs (<b>{(groupName.trim() || "mockup")}-1</b>,{" "}
+              numbered PNGs (<b>{(groupName.trim() || "group")}-1</b>,{" "}
               <b>-2</b>, …). No zip, no one-by-one prompts.
             </p>
           ) : (
             <p className="hint">
-              Saved as numbered PNGs (<b>{(groupName.trim() || "mockup")}-1</b>,{" "}
+              Saved as numbered PNGs (<b>{(groupName.trim() || "group")}-1</b>,{" "}
               <b>-2</b>, …) — no zip. Your browser (Brave/Firefox) downloads them
               individually. To make them all land in Downloads at once like
               Figma, turn off <b>“Ask where to save each file before
