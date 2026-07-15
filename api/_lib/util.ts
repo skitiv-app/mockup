@@ -89,8 +89,30 @@ export function isSuperAdmin(email: string | null): boolean {
 }
 
 export function json(res: any, status: number, body: any) {
-  res.status(status).setHeader("content-type", "application/json");
+  res.statusCode = status;
+  res.setHeader("content-type", "application/json");
   res.end(JSON.stringify(body));
+}
+
+// Body parsing that works whether or not the runtime pre-parses req.body.
+export async function readJson(req: any): Promise<any> {
+  if (req.body && typeof req.body === "object") return req.body;
+  if (typeof req.body === "string") {
+    try { return JSON.parse(req.body || "{}"); } catch { return {}; }
+  }
+  const chunks: Buffer[] = [];
+  for await (const c of req) chunks.push(Buffer.from(c));
+  const raw = Buffer.concat(chunks).toString("utf8");
+  try { return raw ? JSON.parse(raw) : {}; } catch { return {}; }
+}
+
+export function queryParam(req: any, key: string): string | undefined {
+  try {
+    if (req.query && typeof req.query === "object" && req.query[key] != null)
+      return String(req.query[key]);
+    const u = new URL(req.url, "http://localhost");
+    return u.searchParams.get(key) ?? undefined;
+  } catch { return undefined; }
 }
 
 export function slug(s: string): string {

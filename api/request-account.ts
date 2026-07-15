@@ -1,8 +1,8 @@
-import { json, supaRest, slug } from "./_lib/util";
+import { json, supaRest, slug, readJson } from "./_lib/util";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") return json(res, 405, { error: "method not allowed" });
-  const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
+  const body = await readJson(req);
   const email = String(body.email || "").trim().toLowerCase();
   const workspaceName = String(body.workspaceName || "").trim();
   const note = String(body.note || "").trim().slice(0, 500);

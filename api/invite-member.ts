@@ -1,5 +1,5 @@
 import {
-  json, verifyAuth, resolveUserOrg, mgmt, findOrCreateUser, passwordTicket,
+  json, verifyAuth, resolveUserOrg, mgmt, findOrCreateUser, passwordTicket, readJson,
 } from "./_lib/util";
 
 export default async function handler(req: any, res: any) {
@@ -11,7 +11,7 @@ export default async function handler(req: any, res: any) {
   if (!caller) return json(res, 403, { error: "no workspace" });
   if (!caller.roles.includes("owner")) return json(res, 403, { error: "owners only" });
 
-  const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
+  const body = await readJson(req);
   const email = String(body.email || "").trim().toLowerCase();
   const asOwner = body.role === "owner";
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json(res, 400, { error: "valid email required" });

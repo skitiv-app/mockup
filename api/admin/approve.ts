@@ -1,6 +1,6 @@
 import {
   json, verifyAuth, userEmail, isSuperAdmin, supaRest, mgmt, slug,
-  findOrCreateUser, passwordTicket,
+  findOrCreateUser, passwordTicket, readJson,
 } from "../_lib/util";
 
 export default async function handler(req: any, res: any) {
@@ -10,7 +10,7 @@ export default async function handler(req: any, res: any) {
   const adminEmail = await userEmail(String(claims.sub));
   if (!isSuperAdmin(adminEmail)) return json(res, 403, { error: "forbidden" });
 
-  const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
+  const body = await readJson(req);
   const id = String(body.id || "");
   const decision = String(body.decision || "");
   if (!id || !["approve", "reject"].includes(decision)) return json(res, 400, { error: "id and decision required" });
