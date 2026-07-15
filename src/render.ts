@@ -124,3 +124,19 @@ export async function loadScaledMockup(
   ctx.drawImage(img, 0, 0, w, h);
   return { src: canvas.toDataURL("image/png"), width: w, height: h };
 }
+
+// Fetch a remote image (e.g. a Supabase signed URL) and return it as a data URL.
+// Used so an unlocked (cloud-deleted) mockup still holds its pixels for re-lock.
+export function urlToDataUrl(url: string): Promise<string> {
+  return fetch(url)
+    .then((r) => r.blob())
+    .then(
+      (b) =>
+        new Promise<string>((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onload = () => resolve(fr.result as string);
+          fr.onerror = reject;
+          fr.readAsDataURL(b);
+        })
+    );
+}

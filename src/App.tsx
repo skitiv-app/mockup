@@ -15,6 +15,7 @@ import {
   renderMockup,
   downloadBlob,
   delay,
+  urlToDataUrl,
 } from "./render";
 import { detectShirtBoxes } from "./autoplace";
 import MockupCard from "./components/MockupCard";
@@ -24,7 +25,6 @@ import { useIsOwner } from "./auth/useRole";
 import {
   loadMockupsFromDb,
   saveMockupToDb,
-  setMockupLocked,
   deleteMockupFromDb,
 } from "./mockupsRepo";
 
@@ -388,8 +388,24 @@ export default function App() {
           );
           flash("Mockup locked & saved to the cloud ✓");
         } else {
-          await setMockupLocked(cloud.supabase, id, false);
-          flash("Mockup unlocked.");
+          // Unlock now REMOVES the mockup from the cloud (row + stored image).
+          // Keep the image locally (cloud mockups use a signed URL) so a future
+          // lock can re-upload it.
+          let localSrc = updated.src;
+          if (updated.imagePath && !localSrc.startsWith("data:")) {
+            try {
+              localSrc = await urlToDataUrl(updated.src);
+            } catch {
+              /* fall back to the URL; re-lock may need a re-add */
+            }
+          }
+          await deleteMockupFromDb(cloud.supabase, updated);
+          setMockups((list) =>
+            list.map((m) =>
+              m.id === id ? { ...m, src: localSrc, imagePath: undefined } : m
+            )
+          );
+          flash("Unlocked — removed from the cloud.");
         }
       } catch (e: any) {
         flash("Cloud save failed: " + (e?.message ?? "error"));
