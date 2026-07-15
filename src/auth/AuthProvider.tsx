@@ -12,7 +12,6 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       authorizationParams={{
         redirect_uri: window.location.origin,
         audience: auth0Config.audience,
-        organization: auth0Config.organization,
       }}
       cacheLocation="localstorage"
       useRefreshTokens

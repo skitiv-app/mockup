@@ -2,6 +2,10 @@ import type { ReactNode } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
 import { auth0Configured } from "./config";
 import { useIsOwner } from "./useRole";
+import { useState } from "react";
+import { isSuperAdminEmail } from "../api";
+import AdminPanel from "../team/AdminPanel";
+import InviteMember from "../team/InviteMember";
 
 function Centered({ children }: { children: ReactNode }) {
   return <div className="auth-screen">{children}</div>;
@@ -11,11 +15,22 @@ function Centered({ children }: { children: ReactNode }) {
 function UserBar() {
   const { user, logout } = useAuth0();
   const isOwner = useIsOwner();
+  const superAdmin = isSuperAdminEmail(user?.email);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
   return (
     <div className="auth-bar">
       <span className="auth-role" data-role={isOwner ? "owner" : "member"}>
         {isOwner ? "Owner" : "Member"}
       </span>
+      {superAdmin && (
+        <button className="auth-logout" onClick={() => setShowAdmin(true)}>Admin</button>
+      )}
+      {isOwner && (
+        <button className="auth-logout" onClick={() => setShowInvite(true)}>Invite</button>
+      )}
+      {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
+      {showInvite && <InviteMember onClose={() => setShowInvite(false)} />}
       <span className="auth-email">{user?.email ?? user?.name}</span>
       <button
         className="auth-logout"

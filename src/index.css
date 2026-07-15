@@ -886,3 +886,57 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.1); }
   cursor: pointer;
 }
 .auth-logout:hover { background: var(--line-2); }
+
+/* --- Multi-tenant: inputs, modals, request/admin/invite --- */
+.auth-input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  font-size: 14px;
+  margin-bottom: 10px;
+  font-family: inherit;
+  background: var(--panel-2);
+}
+.auth-input:focus { outline: none; box-shadow: var(--ring); border-color: var(--accent); }
+.auth-err { color: var(--danger); font-size: 13px; margin: 4px 0 10px; }
+.auth-block { width: 100%; margin-top: 14px; }
+
+.modal-back {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(16,24,40,0.45);
+  display: grid; place-items: center; padding: 20px;
+}
+.modal {
+  width: 100%; max-width: 460px;
+  background: var(--panel);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 22px;
+  max-height: 85vh; overflow: auto;
+}
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.modal-head h2 { margin: 0; font-size: 18px; }
+
+.req-list { display: flex; flex-direction: column; gap: 10px; }
+.req-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 12px;
+}
+.req-info { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.req-info b { font-size: 14px; }
+.req-info span { color: var(--muted); }
+.req-info em { color: var(--muted-2); font-style: italic; }
+.req-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+.setup-url {
+  background: var(--success-soft); border: 1px solid var(--success);
+  border-radius: var(--r-md); padding: 12px; margin-bottom: 14px; font-size: 13px;
+}
+.setup-url input {
+  width: 100%; margin: 8px 0; padding: 8px; font-size: 12px;
+  border: 1px solid var(--line); border-radius: 6px; background: #fff;
+}
+.setup-url button, .req-actions .mini { cursor: pointer; }
+.role-pick { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; font-size: 14px; }
+.role-pick label { display: flex; align-items: center; gap: 8px; cursor: pointer; }

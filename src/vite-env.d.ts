@@ -7,6 +7,7 @@ interface ImportMetaEnv {
   readonly VITE_AUTH0_ORGANIZATION?: string;
   readonly VITE_SUPABASE_URL: string;
   readonly VITE_SUPABASE_ANON_KEY: string;
+  readonly VITE_SUPER_ADMIN_EMAILS?: string;
 }
 interface ImportMeta {
   readonly env: ImportMetaEnv;
