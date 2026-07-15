@@ -95,6 +95,7 @@ interface Props {
   onPickShape: (shape: ShapeKey) => void;
   onToggleLock: () => void;
   onRemove: () => void;
+  canUnlock: boolean; // members can't unlock a locked mockup
 }
 
 type DragMode = null | "move" | "resize" | "rotate";
@@ -121,6 +122,7 @@ export default function MockupCard({
   onPickShape,
   onToggleLock,
   onRemove,
+  canUnlock,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   // The stage now fills the card, so we measure its real width and derive the
@@ -291,7 +293,14 @@ export default function MockupCard({
           <button
             className={"tone-btn" + (locked ? " lock-on" : "")}
             onClick={onToggleLock}
-            title={locked ? "Unlock to edit placements" : "Lock all placements"}
+            disabled={locked && !canUnlock}
+            title={
+              locked
+                ? canUnlock
+                  ? "Unlock to edit placements"
+                  : "Only an owner can unlock"
+                : "Lock all placements"
+            }
           >
             {locked ? "🔒" : "🔓"}
           </button>

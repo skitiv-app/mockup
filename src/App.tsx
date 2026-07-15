@@ -653,16 +653,18 @@ export default function App() {
 
       <main className="main">
         <div className="toolbar">
-          <label className="file-btn add-btn">
-            ＋ Add mockups
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              hidden
-              onChange={(e) => onAddMockups(e.target.files)}
-            />
-          </label>
+          {isOwner && (
+            <label className="file-btn add-btn">
+              ＋ Add mockups
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                hidden
+                onChange={(e) => onAddMockups(e.target.files)}
+              />
+            </label>
+          )}
           {mockups.length > 0 && (
             <button
               className="mini auto-btn"
@@ -717,7 +719,9 @@ export default function App() {
           <div className="empty">
             <p>No mockups yet.</p>
             <p className="muted">
-              Click <b>+ Add mockups</b> and upload your blank shirt photos.
+              {isOwner
+                ? "Click + Add mockups and upload your blank shirt photos."
+                : "No mockups in your team's library yet. Ask an owner to add some."}
             </p>
           </div>
         ) : (
@@ -800,6 +804,7 @@ export default function App() {
                                 onPickShape={setShape}
                                 onToggleLock={() => toggleLock(m.id)}
                                 onRemove={() => removeMockup(m.id)}
+                                canUnlock={isOwner}
                               />
                             ))}
                           </div>
