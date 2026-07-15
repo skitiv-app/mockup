@@ -5,12 +5,13 @@ export const ROLES_CLAIM = "https://mockupstudio/roles";
 export const auth0Config = {
   domain: import.meta.env.VITE_AUTH0_DOMAIN,
   clientId: import.meta.env.VITE_AUTH0_CLIENT_ID,
-  audience: import.meta.env.VITE_AUTH0_AUDIENCE,
+  // Optional: only needed once Supabase is wired (Phase 2). Empty -> undefined
+  // so basic login (ID token only) works without a registered API/audience.
+  audience: import.meta.env.VITE_AUTH0_AUDIENCE || undefined,
   organization: import.meta.env.VITE_AUTH0_ORGANIZATION || undefined,
 };
 
-// True when the essential Auth0 env vars are present. Lets us show a helpful
-// message instead of a blank screen when the app is misconfigured.
+// Login only needs domain + clientId. Audience is validated later.
 export const auth0Configured = Boolean(
-  auth0Config.domain && auth0Config.clientId && auth0Config.audience
+  auth0Config.domain && auth0Config.clientId
 );
