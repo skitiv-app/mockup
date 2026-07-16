@@ -112,3 +112,19 @@ create policy "org files delete" on storage.objects
     bucket_id = 'mockups'
     and (storage.foldername(name))[1] = auth.jwt()->>'org_id'
   );
+
+-- ---------- Export activity (owner analytics) ----------
+-- RLS enabled with NO policies: only the service-role serverless functions
+-- (/api/log-export, /api/export-stats) touch this table.
+create table if not exists public.export_events (
+  id uuid primary key default gen_random_uuid(),
+  org_id text not null,
+  user_sub text not null,
+  user_email text,
+  image_count int not null default 0,
+  format text,
+  quality text,
+  created_at timestamptz not null default now()
+);
+alter table public.export_events enable row level security;
+create index if not exists export_events_org_idx on public.export_events(org_id, created_at desc);

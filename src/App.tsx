@@ -23,6 +23,7 @@ import JSZip from "jszip";
 import { useAuth0 } from "@auth0/auth0-react";
 import { useSupabase } from "./auth/SupabaseProvider";
 import { useIsOwner } from "./auth/useRole";
+import { useApi } from "./api";
 import {
   loadMockupsFromDb,
   saveMockupToDb,
@@ -80,6 +81,7 @@ export default function App() {
   const orgId = (user as any)?.org_id as string | undefined;
   const userId = (user?.sub as string | undefined) ?? null;
   const isOwner = useIsOwner();
+  const api = useApi();
   const cloud = supabase && orgId ? { supabase, orgId } : null;
 
   function flash(msg: string) {
@@ -543,6 +545,13 @@ export default function App() {
         const blob = await zip.generateAsync({ type: "blob" });
         downloadBlob(blob, `${base}.zip`);
         flash(`Saved ${files.length} images as ${base}.zip ✓`);
+      }
+      // Record this export for the workspace's activity report (owner view).
+      if (cloud) {
+        api("/api/log-export", {
+          method: "POST",
+          body: { count: files.length, format, quality, email: user?.email },
+        }).catch(() => {});
       }
     } finally {
       setExporting(false);

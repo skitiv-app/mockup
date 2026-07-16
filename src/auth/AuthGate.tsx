@@ -6,6 +6,7 @@ import { useState } from "react";
 import { isSuperAdminEmail } from "../api";
 import AdminPanel from "../team/AdminPanel";
 import InviteMember from "../team/InviteMember";
+import ActivityPanel from "../team/ActivityPanel";
 
 function Centered({ children }: { children: ReactNode }) {
   return <div className="auth-screen">{children}</div>;
@@ -18,6 +19,7 @@ function UserBar() {
   const superAdmin = isSuperAdminEmail(user?.email);
   const [showAdmin, setShowAdmin] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
   return (
     <div className="auth-bar">
       <span className="auth-role" data-role={isOwner ? "owner" : "member"}>
@@ -29,8 +31,12 @@ function UserBar() {
       {isOwner && (
         <button className="auth-logout" onClick={() => setShowInvite(true)}>Invite</button>
       )}
+      {isOwner && (
+        <button className="auth-logout" onClick={() => setShowActivity(true)}>Activity</button>
+      )}
       {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
       {showInvite && <InviteMember onClose={() => setShowInvite(false)} />}
+      {showActivity && <ActivityPanel onClose={() => setShowActivity(false)} />}
       <span className="auth-email">{user?.email ?? user?.name}</span>
       <button
         className="auth-logout"

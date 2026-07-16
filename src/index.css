@@ -947,3 +947,13 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.1); }
   margin: 4px 0 10px;
 }
 .size-out { font-size: 13px; color: var(--muted); font-weight: 600; }
+
+/* Export activity report */
+.stat-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 8px; }
+.stat-table th, .stat-table td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line-2); }
+.stat-table th { color: var(--muted); font-weight: 600; }
+.stat-table td:nth-child(2), .stat-table td:nth-child(3),
+.stat-table th:nth-child(2), .stat-table th:nth-child(3) { text-align: right; }
+.stat-sub { font-size: 13px; margin: 14px 0 6px; color: var(--muted); }
+.recent-list { display: flex; flex-direction: column; gap: 4px; }
+.recent-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--line-2); }
