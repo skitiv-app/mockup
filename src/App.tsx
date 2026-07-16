@@ -893,19 +893,6 @@ export default function App() {
           )}
 
           {mockups.length > 0 && (
-            <div className="tone-filter">
-              {(["all", "light", "dark"] as const).map((f) => (
-                <button
-                  key={f}
-                  className={"mini" + (toneFilter === f ? " on" : "")}
-                  onClick={() => setToneFilter(f)}
-                >
-                  {f === "all" ? "All" : f === "light" ? "☀ Light" : "🌙 Dark"}
-                </button>
-              ))}
-            </div>
-          )}
-          {mockups.length > 0 && (
             <span className="chip">{selectedCount} selected</span>
           )}
           <span className="muted hide-sm">
@@ -965,6 +952,17 @@ export default function App() {
               )}
             </span>
           )}
+          <span className="tone-tabs">
+            {(["all", "light", "dark"] as const).map((t) => (
+              <button
+                key={t}
+                className={"cat-tab tone-tab" + (toneFilter === t ? " on" : "")}
+                onClick={() => setToneFilter(t)}
+              >
+                {t === "all" ? "All colors" : t === "light" ? "☀ Light" : "🌙 Dark"}
+              </button>
+            ))}
+          </span>
         </div>
 
         {mockups.length === 0 ? (

@@ -1037,3 +1037,7 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.1); }
   padding: 6px 9px; font-size: 13px; width: 140px; background: var(--panel);
 }
 .cat-tab-add input:focus { outline: none; box-shadow: var(--ring); border-color: var(--accent); }
+
+/* Light/Dark tabs on the right side of the category tab bar */
+.tone-tabs { margin-left: auto; display: inline-flex; gap: 3px; align-items: flex-end; }
+.cat-tab.tone-tab { max-width: none; }
