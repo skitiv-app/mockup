@@ -54,6 +54,7 @@ export default function App() {
   const [toneFilter, setToneFilter] = useState<"all" | "light" | "dark">("all");
   const [brandFilter, setBrandFilter] = useState<"all" | Brand>("all");
   const [groupName, setGroupName] = useState("group");
+  const [format, setFormat] = useState<"jpeg" | "png">("jpeg");
   const [exporting, setExporting] = useState(false);
   const [autoBusy, setAutoBusy] = useState(false);
   // Which mockups are ticked for export. New mockups start selected.
@@ -92,6 +93,7 @@ export default function App() {
       setShape(s.settings.shape);
       setRealism(s.settings.realism);
       setGroupName(s.settings.groupName);
+      setFormat(s.settings.format);
       loaded.current = true;
     });
     return () => {
@@ -118,8 +120,8 @@ export default function App() {
   }, [cloud?.supabase, cloud?.orgId]);
 
   // Keep the latest state in a ref so we can flush it synchronously on close.
-  const latest = useRef({ mockups, presets, design, shape, realism, groupName, cloudActive: false });
-  latest.current = { mockups, presets, design, shape, realism, groupName, cloudActive: !!cloud };
+  const latest = useRef({ mockups, presets, design, shape, realism, groupName, format, cloudActive: false });
+  latest.current = { mockups, presets, design, shape, realism, groupName, format, cloudActive: !!cloud };
   const flush = () => {
     if (!loaded.current) return;
     const l = latest.current;
@@ -133,6 +135,7 @@ export default function App() {
         shape: l.shape,
         realism: l.realism,
         groupName: l.groupName,
+        format: l.format,
       },
     });
   };
@@ -144,7 +147,7 @@ export default function App() {
     window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(flush, 500);
     return () => window.clearTimeout(saveTimer.current);
-  }, [mockups, presets, design, shape, realism, groupName]);
+  }, [mockups, presets, design, shape, realism, groupName, format]);
 
   // Also flush immediately when the tab is hidden or closing, so nothing is
   // lost if you quit within the debounce window.
@@ -481,6 +484,8 @@ export default function App() {
     // zero-padded so they sort correctly in the folder.
     const base = (groupName.trim() || "group").replace(/[\\/:*?"<>|]+/g, "-");
     const pad = String(targets.length).length;
+    const mime = format === "jpeg" ? "image/jpeg" : "image/png";
+    const ext = format === "jpeg" ? "jpg" : "png";
 
     setExporting(true);
     try {
@@ -493,11 +498,12 @@ export default function App() {
         const blob = await renderMockup(m, boxesFor(m), design, {
           realism,
           garment: m.tone ?? "light",
-          mime: "image/png",
+          mime,
+          quality: 0.92,
         });
         i += 1;
         files.push({
-          name: `${base}-${String(i).padStart(pad, "0")}.png`,
+          name: `${base}-${String(i).padStart(pad, "0")}.${ext}`,
           blob,
         });
       }
@@ -631,6 +637,18 @@ export default function App() {
 
         <section className="panel">
           <h2>4 · Export</h2>
+          <label className="field-label">Format</label>
+          <div className="shape-tabs">
+            {(["jpeg", "png"] as const).map((fmt) => (
+              <button
+                key={fmt}
+                className={"shape-tab" + (format === fmt ? " on" : "")}
+                onClick={() => setFormat(fmt)}
+              >
+                {fmt === "jpeg" ? "JPG" : "PNG"}
+              </button>
+            ))}
+          </div>
           <label className="field-label">File name</label>
           <div className="name-row">
             <input
@@ -640,7 +658,7 @@ export default function App() {
               onChange={(e) => setGroupName(e.target.value)}
             />
             <span className="name-preview">
-              {(groupName.trim() || "group")}-1.png
+              {(groupName.trim() || "group")}-1.{format === "jpeg" ? "jpg" : "png"}
             </span>
           </div>
           <button
@@ -661,12 +679,12 @@ export default function App() {
           {hasFolderApi ? (
             <p className="hint">
               Pick a folder once — all ticked mockups save straight into it as
-              numbered PNGs (<b>{(groupName.trim() || "group")}-1</b>,{" "}
+              numbered {format === "jpeg" ? "JPGs" : "PNGs"} (<b>{(groupName.trim() || "group")}-1</b>,{" "}
               <b>-2</b>, …). No zip, no one-by-one prompts.
             </p>
           ) : (
             <p className="hint">
-              Saved as numbered PNGs (<b>{(groupName.trim() || "group")}-1</b>,{" "}
+              Saved as numbered {format === "jpeg" ? "JPGs" : "PNGs"} (<b>{(groupName.trim() || "group")}-1</b>,{" "}
               <b>-2</b>, …) — no zip. Your browser (Brave/Firefox) downloads them
               individually. To make them all land in Downloads at once like
               Figma, turn off <b>“Ask where to save each file before

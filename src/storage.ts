@@ -10,6 +10,7 @@ export interface PersistedSettings {
   shape: ShapeKey;
   realism: number; // 0..1
   groupName: string; // base name for exported files
+  format: "jpeg" | "png"; // export image format
 }
 
 export interface PersistedState {
@@ -24,6 +25,7 @@ const DEFAULT_SETTINGS: PersistedSettings = {
   shape: "short",
   realism: 0.6,
   groupName: "group",
+  format: "jpeg",
 };
 
 // Older versions stored a single Box per shape instead of an array. Wrap any
