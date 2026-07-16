@@ -84,6 +84,18 @@ export default function App() {
   const api = useApi();
   const cloud = supabase && orgId ? { supabase, orgId } : null;
 
+  // Per-card shape override. A card uses its own shape if set, else the global
+  // one. The header control sets the global shape and clears all overrides.
+  const [cardShape, setCardShape] = useState<Record<string, ShapeKey>>({});
+  const shapeFor = (id: string): ShapeKey => cardShape[id] ?? shape;
+  function setShapeForCard(id: string, s: ShapeKey) {
+    setCardShape((prev) => ({ ...prev, [id]: s }));
+  }
+  function setAllShape(s: ShapeKey) {
+    setShape(s);
+    setCardShape({}); // every card follows the global shape again
+  }
+
   function flash(msg: string) {
     setToast(msg);
     window.setTimeout(() => setToast((t) => (t === msg ? null : t)), 3000);
@@ -232,16 +244,18 @@ export default function App() {
   // Boxes for a mockup at the active shape, creating a single default if none
   // are saved yet.
   function boxesFor(mockup: Mockup): Box[] {
-    const saved = mockup.placements[shape];
+    const sh = shapeFor(mockup.id);
+    const saved = mockup.placements[sh];
     if (saved && saved.length) return saved;
-    return [defaultBox(mockup, presets[shape])];
+    return [defaultBox(mockup, presets[sh])];
   }
 
   function updateBoxes(id: string, boxes: Box[]) {
+    const sh = shapeFor(id);
     setMockups((list) =>
       list.map((m) =>
         m.id === id
-          ? { ...m, placements: { ...m.placements, [shape]: boxes } }
+          ? { ...m, placements: { ...m.placements, [sh]: boxes } }
           : m
       )
     );
@@ -251,6 +265,7 @@ export default function App() {
   // with more than one shirt can each get the design. New spot is nudged down
   // and right so it doesn't sit exactly on top of the last one.
   function addBox(id: string) {
+    const sh = shapeFor(id);
     setMockups((list) =>
       list.map((m) => {
         if (m.id !== id) return m;
@@ -259,17 +274,18 @@ export default function App() {
         const nx = Math.min(base.x + base.w * 0.25, m.width - base.w);
         const ny = Math.min(base.y + base.h * 0.25, m.height - base.h);
         const added: Box = { ...base, x: Math.max(0, nx), y: Math.max(0, ny) };
-        return { ...m, placements: { ...m.placements, [shape]: [...boxes, added] } };
+        return { ...m, placements: { ...m.placements, [sh]: [...boxes, added] } };
       })
     );
   }
 
   function removeBox(id: string, index: number) {
+    const sh = shapeFor(id);
     setMockups((list) =>
       list.map((m) => {
         if (m.id !== id) return m;
         const boxes = boxesFor(m).filter((_, i) => i !== index);
-        return { ...m, placements: { ...m.placements, [shape]: boxes } };
+        return { ...m, placements: { ...m.placements, [sh]: boxes } };
       })
     );
   }
@@ -280,6 +296,7 @@ export default function App() {
   function applyLayoutToAll(sourceId: string) {
     const source = mockups.find((m) => m.id === sourceId);
     if (!source) return;
+    const sh = shapeFor(sourceId);
     const boxes = boxesFor(source);
     const frac = boxes.map((b) => ({
       x: b.x / source.width,
@@ -298,7 +315,7 @@ export default function App() {
           h: f.h * m.height,
           rotation: f.rotation,
         }));
-        return { ...m, placements: { ...m.placements, [shape]: scaled } };
+        return { ...m, placements: { ...m.placements, [sh]: scaled } };
       })
     );
   }
@@ -308,7 +325,7 @@ export default function App() {
   async function autoPlaceOne(id: string): Promise<number> {
     const m = mockups.find((x) => x.id === id);
     if (!m || m.locked) return 0;
-    const boxes = await detectShirtBoxes(m.src, m.width, m.height, presets[shape], 2);
+    const boxes = await detectShirtBoxes(m.src, m.width, m.height, presets[shapeFor(id)], 2);
     if (boxes.length) updateBoxes(id, boxes);
     return boxes.length;
   }
@@ -808,6 +825,20 @@ export default function App() {
             </button>
           )}
           {mockups.length > 0 && (
+            <div className="tone-filter" title="Set the shape for every card">
+              <span className="filter-label">Shape (all):</span>
+              {SHAPE_KEYS.map((k) => (
+                <button
+                  key={k}
+                  className={"mini" + (shape === k ? " on" : "")}
+                  onClick={() => setAllShape(k)}
+                >
+                  {k}
+                </button>
+              ))}
+            </div>
+          )}
+          {mockups.length > 0 && (
             <div className="tone-filter">
               <button
                 className={"mini" + (brandFilter === "all" ? " on" : "")}
@@ -916,7 +947,7 @@ export default function App() {
                               <MockupCard
                                 key={m.id}
                                 mockup={m}
-                                shape={shape}
+                                shape={shapeFor(m.id)}
                                 boxes={boxesFor(m)}
                                 design={design}
                                 realism={realism}
@@ -933,7 +964,7 @@ export default function App() {
                                 onSetBrand={(b) => setBrand(m.id, b)}
                                 onCopy={() => copyMockup(m.id)}
                                 onToggleSelect={() => toggleSelect(m.id)}
-                                onPickShape={setShape}
+                                onPickShape={(s) => setShapeForCard(m.id, s)}
                                 onToggleLock={() => toggleLock(m.id)}
                                 onRemove={() => removeMockup(m.id)}
                                 isOwner={isOwner}
