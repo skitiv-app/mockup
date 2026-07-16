@@ -988,8 +988,7 @@ export default function App() {
             return cats
               .filter(
                 (cat) =>
-                  mockups.some((m) => inCat(cat, m)) ||
-                  (isOwner && cat !== UNCAT)
+                  categoryFilter !== "all" || mockups.some((m) => inCat(cat, m))
               )
               .map((cat) => {
                 const catMockups = mockups.filter((m) => inCat(cat, m));
@@ -1002,7 +1001,11 @@ export default function App() {
                       </h2>
                     )}
                     {(["light", "dark"] as const)
-                      .filter((tone) => toneFilter === "all" || toneFilter === tone)
+                      .filter(
+                        (tone) =>
+                          (toneFilter === "all" || toneFilter === tone) &&
+                          catMockups.some((m) => (m.tone ?? "light") === tone)
+                      )
                       .map((tone) => {
                         const group = catMockups.filter(
                           (m) => (m.tone ?? "light") === tone
@@ -1036,11 +1039,7 @@ export default function App() {
                                 </div>
                               )}
                             </div>
-                            {group.length === 0 ? (
-                              <p className="muted tone-empty">
-                                None here yet.
-                              </p>
-                            ) : (
+                            {(
                               <div className="grid">
                                 {group.map((m) => (
                                   <MockupCard
@@ -1075,6 +1074,12 @@ export default function App() {
                           </section>
                         );
                       })}
+                    {catMockups.length === 0 && (
+                      <p className="muted tone-empty">
+                        Nothing in this category yet — add mockups here or tag
+                        existing ones with this category.
+                      </p>
+                    )}
                   </section>
                 );
               });
