@@ -19,6 +19,7 @@ import {
 } from "./render";
 import { detectShirtBoxes } from "./autoplace";
 import MockupCard from "./components/MockupCard";
+import JSZip from "jszip";
 import { useAuth0 } from "@auth0/auth0-react";
 import { useSupabase } from "./auth/SupabaseProvider";
 import { useIsOwner } from "./auth/useRole";
@@ -516,12 +517,18 @@ export default function App() {
           await w.close();
         }
         flash(`Saved ${files.length} images to your folder ✓`);
+      } else if (files.length === 1) {
+        // Single image — just download it directly.
+        downloadBlob(files[0].blob, files[0].name);
+        flash("Downloaded 1 image ✓");
       } else {
-        for (const f of files) {
-          downloadBlob(f.blob, f.name);
-          await delay(120);
-        }
-        flash(`Sent ${files.length} images to Downloads ✓`);
+        // No folder API (not Chrome/Edge) — bundle into ONE zip so the browser
+        // asks once, not per image.
+        const zip = new JSZip();
+        for (const f of files) zip.file(f.name, f.blob);
+        const blob = await zip.generateAsync({ type: "blob" });
+        downloadBlob(blob, `${base}.zip`);
+        flash(`Saved ${files.length} images as ${base}.zip ✓`);
       }
     } finally {
       setExporting(false);
@@ -684,12 +691,11 @@ export default function App() {
             </p>
           ) : (
             <p className="hint">
-              Saved as numbered {format === "jpeg" ? "JPGs" : "PNGs"} (<b>{(groupName.trim() || "group")}-1</b>,{" "}
-              <b>-2</b>, …) — no zip. Your browser (Brave/Firefox) downloads them
-              individually. To make them all land in Downloads at once like
-              Figma, turn off <b>“Ask where to save each file before
-              downloading”</b> in your browser’s download settings — or open this
-              app in Chrome/Edge to pick one folder.
+              Your browser can't save to a chosen folder, so multiple images come
+              down as a single <b>{(groupName.trim() || "group")}.zip</b> (one
+              prompt, not one per image). Open this app in <b>Chrome or Edge</b> to
+              instead pick a folder once and get the images as individual{" "}
+              {format === "jpeg" ? "JPGs" : "PNGs"}.
             </p>
           )}
         </section>
