@@ -891,50 +891,7 @@ export default function App() {
               ))}
             </div>
           )}
-          <div className="tone-filter">
-            <button
-              className={"mini" + (categoryFilter === "all" ? " on" : "")}
-              onClick={() => setCategoryFilter("all")}
-            >
-              All
-            </button>
-            {categoryList.map((c) => (
-              <span key={c} className="cat-filter">
-                <button
-                  className={"mini" + (categoryFilter === c ? " on" : "")}
-                  onClick={() => setCategoryFilter(c)}
-                >
-                  👕 {c}
-                </button>
-                {isOwner && (
-                  <button
-                    className="cat-del"
-                    title={`Delete category "${c}"`}
-                    onClick={() => deleteCategory(c)}
-                  >
-                    ×
-                  </button>
-                )}
-              </span>
-            ))}
-            <button
-              className={"mini" + (categoryFilter === UNCAT ? " on" : "")}
-              onClick={() => setCategoryFilter(UNCAT)}
-            >
-              {UNCAT}
-            </button>
-            {isOwner && (
-              <span className="cat-add">
-                <input
-                  value={newCat}
-                  placeholder="+ New category"
-                  onChange={(e) => setNewCat(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") addCategory(newCat); }}
-                />
-                <button className="mini" onClick={() => addCategory(newCat)}>Add</button>
-              </span>
-            )}
-          </div>
+
           {mockups.length > 0 && (
             <div className="tone-filter">
               {(["all", "light", "dark"] as const).map((f) => (
@@ -954,6 +911,60 @@ export default function App() {
           <span className="muted hide-sm">
             Drag to move · corner resizes · outside a corner rotates.
           </span>
+        </div>
+
+        {/* Category tabs (Chrome-style) */}
+        <div className="cat-tabs">
+          <button
+            className={"cat-tab" + (categoryFilter === "all" ? " on" : "")}
+            onClick={() => setCategoryFilter("all")}
+          >
+            All
+          </button>
+          {categoryList.map((c) => {
+            const count = mockups.filter((m) => (m.categories ?? []).includes(c)).length;
+            return (
+              <button
+                key={c}
+                className={"cat-tab" + (categoryFilter === c ? " on" : "")}
+                onClick={() => setCategoryFilter(c)}
+              >
+                <span className="cat-tab-label">{c}</span>
+                <span className="cat-tab-count">{count}</span>
+                {isOwner && (
+                  <span
+                    className="cat-tab-x"
+                    title={`Delete "${c}"`}
+                    onClick={(e) => { e.stopPropagation(); deleteCategory(c); }}
+                  >
+                    ×
+                  </span>
+                )}
+              </button>
+            );
+          })}
+          <button
+            className={"cat-tab" + (categoryFilter === UNCAT ? " on" : "")}
+            onClick={() => setCategoryFilter(UNCAT)}
+          >
+            <span className="cat-tab-label">{UNCAT}</span>
+            <span className="cat-tab-count">
+              {mockups.filter((m) => !(m.categories && m.categories.length)).length}
+            </span>
+          </button>
+          {isOwner && (
+            <span className="cat-tab-add">
+              <input
+                value={newCat}
+                placeholder="+ New category"
+                onChange={(e) => setNewCat(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") addCategory(newCat); }}
+              />
+              {newCat.trim() && (
+                <button className="mini" onClick={() => addCategory(newCat)}>Add</button>
+              )}
+            </span>
+          )}
         </div>
 
         {mockups.length === 0 ? (
@@ -984,10 +995,12 @@ export default function App() {
                 const catMockups = mockups.filter((m) => inCat(cat, m));
                 return (
                   <section className="brand-group" key={cat}>
-                    <h2 className="brand-head">
-                      👕 {cat}
-                      <span className="chip">{catMockups.length}</span>
-                    </h2>
+                    {categoryFilter === "all" && (
+                      <h2 className="brand-head">
+                        👕 {cat}
+                        <span className="chip">{catMockups.length}</span>
+                      </h2>
+                    )}
                     {(["light", "dark"] as const)
                       .filter((tone) => toneFilter === "all" || toneFilter === tone)
                       .map((tone) => {
