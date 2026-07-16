@@ -108,9 +108,9 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   }
 
   return (
-    <>
+    <div className="app-shell">
       <UserBar />
-      {children}
-    </>
+      <div className="app-body">{children}</div>
+    </div>
   );
 }
