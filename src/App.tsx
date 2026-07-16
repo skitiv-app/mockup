@@ -28,9 +28,13 @@ import {
   loadMockupsFromDb,
   saveMockupToDb,
   deleteMockupFromDb,
+  updateMockupCategories,
+  loadCategoryList,
+  saveCategoryList,
 } from "./mockupsRepo";
 
 const uid = () => Math.random().toString(36).slice(2, 9);
+const UNCAT = "Uncategorized";
 
 // Export quality presets: output scale + JPEG compression.
 const QUALITY: Record<"low" | "medium" | "high", { scale: number; jpeg: number }> = {
@@ -61,7 +65,9 @@ export default function App() {
   const [design, setDesign] = useState<DesignAsset | null>(null);
   const [realism, setRealism] = useState(0.6);
   const [toneFilter, setToneFilter] = useState<"all" | "light" | "dark">("all");
-  const [brandFilter, setBrandFilter] = useState<"all" | Brand>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [categoryList, setCategoryList] = useState<string[]>(["Comfort Colors", "Gildan"]);
+  const [newCat, setNewCat] = useState("");
   const [groupName, setGroupName] = useState("group");
   const [format, setFormat] = useState<"jpeg" | "png">("jpeg");
   const [quality, setQuality] = useState<"low" | "medium" | "high">("high");
@@ -133,10 +139,18 @@ export default function App() {
     if (!cloud) return;
     let cancelled = false;
     loadMockupsFromDb(cloud.supabase)
-      .then((remote) => {
+      .then(async (remote) => {
         if (cancelled) return;
         setMockups(remote);
         setSelected(new Set(remote.map((m) => m.id)));
+        // Build the workspace category list: saved list ∪ any categories used
+        // by mockups, falling back to the defaults.
+        const saved = await loadCategoryList(cloud.supabase).catch(() => null);
+        const used = new Set<string>();
+        remote.forEach((m) => (m.categories ?? []).forEach((c) => used.add(c)));
+        const merged = Array.from(new Set([...(saved ?? []), ...used]));
+        if (!cancelled && merged.length)
+          setCategoryList(saved && saved.length ? Array.from(new Set([...saved, ...used])) : merged);
       })
       .catch((e) => flash("Couldn't load cloud mockups: " + (e?.message ?? e)));
     return () => {
@@ -201,6 +215,10 @@ export default function App() {
         src,
         width,
         height,
+        categories:
+          categoryFilter !== "all" && categoryFilter !== UNCAT
+            ? [categoryFilter]
+            : [],
         placements: {},
       });
     }
@@ -455,9 +473,44 @@ export default function App() {
     setMockups((list) => list.map((m) => (m.id === id ? { ...m, tone } : m)));
   }
 
-  function setBrand(id: string, brand: Brand) {
+  // ---- Categories (owner-defined, mockups can be in several) ----
+  function persistCategoryList(list: string[]) {
+    setCategoryList(list);
+    if (cloud && isOwner)
+      saveCategoryList(cloud.supabase, cloud.orgId, list).catch(() => {});
+  }
+  function addCategory(name: string) {
+    const n = name.trim();
+    if (!n || n === UNCAT || categoryList.includes(n)) return;
+    persistCategoryList([...categoryList, n]);
+    setNewCat("");
+  }
+  function deleteCategory(name: string) {
     if (!isOwner) return;
-    setMockups((list) => list.map((m) => (m.id === id ? { ...m, brand } : m)));
+    persistCategoryList(categoryList.filter((c) => c !== name));
+    // Pull the category off every mockup that had it (and persist saved ones).
+    setMockups((list) =>
+      list.map((m) => {
+        if (!m.categories?.includes(name)) return m;
+        const cats = m.categories.filter((c) => c !== name);
+        if (cloud && m.imagePath)
+          updateMockupCategories(cloud.supabase, m.id, cats).catch(() => {});
+        return { ...m, categories: cats };
+      })
+    );
+    if (categoryFilter === name) setCategoryFilter("all");
+  }
+  function toggleMockupCategory(id: string, cat: string) {
+    if (!isOwner) return;
+    const m = mockups.find((x) => x.id === id);
+    if (!m) return;
+    const has = m.categories?.includes(cat);
+    const cats = has
+      ? (m.categories ?? []).filter((c) => c !== cat)
+      : [...(m.categories ?? []), cat];
+    setMockups((list) => list.map((x) => (x.id === id ? { ...x, categories: cats } : x)));
+    if (cloud && m.imagePath)
+      updateMockupCategories(cloud.supabase, id, cats).catch(() => {});
   }
 
   // Render one mockup and put the finished image on the clipboard, ready to
@@ -838,25 +891,50 @@ export default function App() {
               ))}
             </div>
           )}
-          {mockups.length > 0 && (
-            <div className="tone-filter">
-              <button
-                className={"mini" + (brandFilter === "all" ? " on" : "")}
-                onClick={() => setBrandFilter("all")}
-              >
-                All brands
-              </button>
-              {BRANDS.map((b) => (
+          <div className="tone-filter">
+            <button
+              className={"mini" + (categoryFilter === "all" ? " on" : "")}
+              onClick={() => setCategoryFilter("all")}
+            >
+              All
+            </button>
+            {categoryList.map((c) => (
+              <span key={c} className="cat-filter">
                 <button
-                  key={b}
-                  className={"mini" + (brandFilter === b ? " on" : "")}
-                  onClick={() => setBrandFilter(b)}
+                  className={"mini" + (categoryFilter === c ? " on" : "")}
+                  onClick={() => setCategoryFilter(c)}
                 >
-                  👕 {b === "Comfort Colors" ? "CC" : b}
+                  👕 {c}
                 </button>
-              ))}
-            </div>
-          )}
+                {isOwner && (
+                  <button
+                    className="cat-del"
+                    title={`Delete category "${c}"`}
+                    onClick={() => deleteCategory(c)}
+                  >
+                    ×
+                  </button>
+                )}
+              </span>
+            ))}
+            <button
+              className={"mini" + (categoryFilter === UNCAT ? " on" : "")}
+              onClick={() => setCategoryFilter(UNCAT)}
+            >
+              {UNCAT}
+            </button>
+            {isOwner && (
+              <span className="cat-add">
+                <input
+                  value={newCat}
+                  placeholder="+ New category"
+                  onChange={(e) => setNewCat(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") addCategory(newCat); }}
+                />
+                <button className="mini" onClick={() => addCategory(newCat)}>Add</button>
+              </span>
+            )}
+          </div>
           {mockups.length > 0 && (
             <div className="tone-filter">
               {(["all", "light", "dark"] as const).map((f) => (
@@ -888,96 +966,106 @@ export default function App() {
             </p>
           </div>
         ) : (
-          BRANDS.filter(
-            (brand) =>
-              (brandFilter === "all" || brandFilter === brand) &&
-              mockups.some((m) => (m.brand ?? DEFAULT_BRAND) === brand)
-          ).map((brand) => {
-            const brandMockups = mockups.filter(
-              (m) => (m.brand ?? DEFAULT_BRAND) === brand
+          (() => {
+            const inCat = (cat: string, m: Mockup) =>
+              cat === UNCAT
+                ? !(m.categories && m.categories.length)
+                : (m.categories ?? []).includes(cat);
+            const cats = [...categoryList, UNCAT].filter(
+              (cat) => categoryFilter === "all" || categoryFilter === cat
             );
-            return (
-              <section className="brand-group" key={brand}>
-                <h2 className="brand-head">
-                  👕 {brand}
-                  <span className="chip">{brandMockups.length}</span>
-                </h2>
-                {(["light", "dark"] as const)
-                  .filter((tone) => toneFilter === "all" || toneFilter === tone)
-                  .map((tone) => {
-                    const group = brandMockups.filter(
-                      (m) => (m.tone ?? "light") === tone
-                    );
-                    return (
-                      <section className="tone-group" key={tone}>
-                        <div className="tone-head">
-                          <span className={"swatch " + tone} />
-                          <h3>
-                            {tone === "light" ? "Light color" : "Dark color"} mockups
-                          </h3>
-                          <span className="chip">{group.length}</span>
-                          {group.length > 0 && (
-                            <div className="tone-select">
-                              <button
-                                className="mini"
-                                onClick={() =>
-                                  setGroupSelected(group.map((m) => m.id), true)
-                                }
-                              >
-                                Select all
-                              </button>
-                              <button
-                                className="mini"
-                                onClick={() =>
-                                  setGroupSelected(group.map((m) => m.id), false)
-                                }
-                              >
-                                None
-                              </button>
+            return cats
+              .filter(
+                (cat) =>
+                  mockups.some((m) => inCat(cat, m)) ||
+                  (isOwner && cat !== UNCAT)
+              )
+              .map((cat) => {
+                const catMockups = mockups.filter((m) => inCat(cat, m));
+                return (
+                  <section className="brand-group" key={cat}>
+                    <h2 className="brand-head">
+                      👕 {cat}
+                      <span className="chip">{catMockups.length}</span>
+                    </h2>
+                    {(["light", "dark"] as const)
+                      .filter((tone) => toneFilter === "all" || toneFilter === tone)
+                      .map((tone) => {
+                        const group = catMockups.filter(
+                          (m) => (m.tone ?? "light") === tone
+                        );
+                        return (
+                          <section className="tone-group" key={tone}>
+                            <div className="tone-head">
+                              <span className={"swatch " + tone} />
+                              <h3>
+                                {tone === "light" ? "Light color" : "Dark color"} mockups
+                              </h3>
+                              <span className="chip">{group.length}</span>
+                              {group.length > 0 && (
+                                <div className="tone-select">
+                                  <button
+                                    className="mini"
+                                    onClick={() =>
+                                      setGroupSelected(group.map((m) => m.id), true)
+                                    }
+                                  >
+                                    Select all
+                                  </button>
+                                  <button
+                                    className="mini"
+                                    onClick={() =>
+                                      setGroupSelected(group.map((m) => m.id), false)
+                                    }
+                                  >
+                                    None
+                                  </button>
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                        {group.length === 0 ? (
-                          <p className="muted tone-empty">
-                            None yet — use the ☀ / 🌙 toggle on a mockup to move it here.
-                          </p>
-                        ) : (
-                          <div className="grid">
-                            {group.map((m) => (
-                              <MockupCard
-                                key={m.id}
-                                mockup={m}
-                                shape={shapeFor(m.id)}
-                                boxes={boxesFor(m)}
-                                design={design}
-                                realism={realism}
-                                garment={m.tone ?? "light"}
-                                selected={selected.has(m.id)}
-                                hasMany={mockups.length > 1}
-                                autoBusy={autoBusy}
-                                onChangeBoxes={(boxes) => updateBoxes(m.id, boxes)}
-                                onAddBox={() => addBox(m.id)}
-                                onRemoveBox={(i) => removeBox(m.id, i)}
-                                onApplyToAll={() => applyLayoutToAll(m.id)}
-                                onAutoPlace={() => autoPlaceCard(m.id)}
-                                onSetTone={(t) => setTone(m.id, t)}
-                                onSetBrand={(b) => setBrand(m.id, b)}
-                                onCopy={() => copyMockup(m.id)}
-                                onToggleSelect={() => toggleSelect(m.id)}
-                                onPickShape={(s) => setShapeForCard(m.id, s)}
-                                onToggleLock={() => toggleLock(m.id)}
-                                onRemove={() => removeMockup(m.id)}
-                                isOwner={isOwner}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </section>
-                    );
-                  })}
-              </section>
-            );
-          })
+                            {group.length === 0 ? (
+                              <p className="muted tone-empty">
+                                None here yet.
+                              </p>
+                            ) : (
+                              <div className="grid">
+                                {group.map((m) => (
+                                  <MockupCard
+                                    key={m.id}
+                                    mockup={m}
+                                    shape={shapeFor(m.id)}
+                                    boxes={boxesFor(m)}
+                                    design={design}
+                                    realism={realism}
+                                    garment={m.tone ?? "light"}
+                                    selected={selected.has(m.id)}
+                                    hasMany={mockups.length > 1}
+                                    autoBusy={autoBusy}
+                                    allCategories={categoryList}
+                                    onChangeBoxes={(boxes) => updateBoxes(m.id, boxes)}
+                                    onAddBox={() => addBox(m.id)}
+                                    onRemoveBox={(i) => removeBox(m.id, i)}
+                                    onApplyToAll={() => applyLayoutToAll(m.id)}
+                                    onAutoPlace={() => autoPlaceCard(m.id)}
+                                    onSetTone={(t) => setTone(m.id, t)}
+                                    onToggleCategory={(c) => toggleMockupCategory(m.id, c)}
+                                    onCopy={() => copyMockup(m.id)}
+                                    onToggleSelect={() => toggleSelect(m.id)}
+                                    onPickShape={(s) => setShapeForCard(m.id, s)}
+                                    onToggleLock={() => toggleLock(m.id)}
+                                    onRemove={() => removeMockup(m.id)}
+                                    isOwner={isOwner}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </section>
+                        );
+                      })}
+                  </section>
+                );
+              });
+          })()
         )}
       </main>
 

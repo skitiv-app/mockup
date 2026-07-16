@@ -15,6 +15,7 @@ interface Row {
   height: number;
   tone: "light" | "dark" | null;
   brand: string | null;
+  categories: string[] | null;
   placements: Partial<Record<ShapeKey, Box[]>>;
   locked: boolean;
 }
@@ -53,6 +54,11 @@ export async function loadMockupsFromDb(
       height: r.height,
       tone: r.tone ?? "light",
       brand: (r.brand as Brand) ?? undefined,
+      categories: (r.categories && r.categories.length
+        ? r.categories
+        : r.brand
+        ? [r.brand]
+        : []) as string[],
       placements: r.placements ?? {},
       locked: r.locked,
       imagePath: r.image_path,
@@ -89,6 +95,7 @@ export async function saveMockupToDb(
     height: mockup.height,
     tone: mockup.tone ?? "light",
     brand: mockup.brand ?? null,
+    categories: mockup.categories ?? [],
     placements: mockup.placements ?? {},
     locked: mockup.locked ?? true,
     updated_at: new Date().toISOString(),
@@ -119,5 +126,41 @@ export async function deleteMockupFromDb(
     await supabase.storage.from(BUCKET).remove([mockup.imagePath]);
   }
   const { error } = await supabase.from("mockups").delete().eq("id", mockup.id);
+  if (error) throw error;
+}
+
+// Update just a mockup's categories (owner organizing a saved mockup).
+export async function updateMockupCategories(
+  supabase: SupabaseClient,
+  id: string,
+  categories: string[]
+): Promise<void> {
+  const { error } = await supabase
+    .from("mockups")
+    .update({ categories, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+// The workspace's owner-defined category list (shared with members).
+export async function loadCategoryList(
+  supabase: SupabaseClient
+): Promise<string[] | null> {
+  const { data, error } = await supabase.from("org_state").select("settings").limit(1);
+  if (error) return null;
+  const s = data && data[0] ? (data[0].settings as any) : null;
+  return s && Array.isArray(s.categories) ? (s.categories as string[]) : null;
+}
+
+export async function saveCategoryList(
+  supabase: SupabaseClient,
+  orgId: string,
+  categories: string[]
+): Promise<void> {
+  const { error } = await supabase.from("org_state").upsert({
+    org_id: orgId,
+    settings: { categories },
+    updated_at: new Date().toISOString(),
+  });
   if (error) throw error;
 }

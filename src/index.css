@@ -959,3 +959,27 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.1); }
 .recent-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--line-2); }
 
 .filter-label { font-size: 12px; color: var(--muted); align-self: center; margin-right: 2px; }
+
+/* Header wrap so the toolbar doesn't overflow */
+.toolbar { flex-wrap: wrap; row-gap: 8px; }
+
+/* Category filter (header) + delete + add */
+.cat-filter { display: inline-flex; align-items: center; }
+.cat-del {
+  border: none; background: transparent; color: var(--muted-2);
+  cursor: pointer; font-size: 15px; line-height: 1; padding: 0 4px; margin-left: -2px;
+}
+.cat-del:hover { color: var(--danger); }
+.cat-add { display: inline-flex; gap: 4px; align-items: center; }
+.cat-add input {
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 5px 8px; font-size: 13px; width: 130px; background: var(--panel);
+}
+
+/* Category chips on a card */
+.cat-row { display: flex; flex-wrap: wrap; gap: 5px; padding: 6px 10px 0; }
+.cat-chip {
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--muted);
+  border-radius: 999px; padding: 3px 9px; font-size: 11px; cursor: pointer;
+}
+.cat-chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-2); font-weight: 600; }

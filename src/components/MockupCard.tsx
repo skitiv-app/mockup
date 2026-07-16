@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { Box, Brand, DesignAsset, Mockup, ShapeKey } from "../types";
-import { SHAPE_KEYS, BRANDS, DEFAULT_BRAND } from "../types";
+import type { Box, DesignAsset, Mockup, ShapeKey } from "../types";
+import { SHAPE_KEYS } from "../types";
 import { compositeDesignBox, loadImageCached, type Garment } from "../composite";
 
 // Canvas layer that renders the design into every box with displacement +
@@ -89,7 +89,8 @@ interface Props {
   onApplyToAll: () => void;
   onAutoPlace: () => void;
   onSetTone: (tone: Garment) => void;
-  onSetBrand: (brand: Brand) => void;
+  allCategories: string[];
+  onToggleCategory: (cat: string) => void;
   onCopy: () => void;
   onToggleSelect: () => void;
   onPickShape: (shape: ShapeKey) => void;
@@ -116,7 +117,8 @@ export default function MockupCard({
   onApplyToAll,
   onAutoPlace,
   onSetTone,
-  onSetBrand,
+  allCategories,
+  onToggleCategory,
   onCopy,
   onToggleSelect,
   onPickShape,
@@ -156,9 +158,6 @@ export default function MockupCard({
   }, [mockup.locked]);
 
   const locked = !!mockup.locked;
-  const brand = mockup.brand ?? DEFAULT_BRAND;
-  const otherBrand = BRANDS.find((b) => b !== brand) ?? DEFAULT_BRAND;
-  const brandShort = brand === "Comfort Colors" ? "CC" : brand;
 
   function toImgCoords(clientX: number, clientY: number) {
     const rect = wrapRef.current!.getBoundingClientRect();
@@ -268,15 +267,6 @@ export default function MockupCard({
         <div className="head-actions">
           {isOwner && (
             <button
-              className="tone-btn brand-btn"
-              onClick={() => onSetBrand(otherBrand)}
-              title={`Brand: ${brand} — click to move to ${otherBrand}`}
-            >
-              👕 {brandShort}
-            </button>
-          )}
-          {isOwner && (
-            <button
               className="tone-btn"
               onClick={() => onSetTone(garment === "light" ? "dark" : "light")}
               title={`This mockup is ${garment} — click to move it to the ${
@@ -334,6 +324,32 @@ export default function MockupCard({
             </button>
           );
         })}
+      </div>
+
+      <div className="cat-row">
+        {isOwner
+          ? allCategories.map((cat) => (
+              <button
+                key={cat}
+                className={
+                  "cat-chip" +
+                  (mockup.categories?.includes(cat) ? " on" : "")
+                }
+                onClick={() => onToggleCategory(cat)}
+                title={
+                  mockup.categories?.includes(cat)
+                    ? `Remove from ${cat}`
+                    : `Add to ${cat}`
+                }
+              >
+                {cat}
+              </button>
+            ))
+          : (mockup.categories ?? []).map((cat) => (
+              <span key={cat} className="cat-chip on">
+                {cat}
+              </span>
+            ))}
       </div>
 
       <div

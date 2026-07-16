@@ -27,9 +27,11 @@ export interface Mockup {
   // Which colour group this mockup belongs to. Drives the light/dark realism
   // blend and which section it shows under. Defaults to "light".
   tone?: "light" | "dark";
-  // Shirt brand — the top-level section this mockup groups under. Defaults to
-  // DEFAULT_BRAND.
+  // Shirt brand — legacy single category (kept for migration).
   brand?: Brand;
+  // Owner-defined categories this mockup belongs to. A mockup can be in several
+  // sections at once. Empty = "Uncategorized".
+  categories?: string[];
   // Saved placement boxes per shape. A mockup can have several spots (e.g. a
   // photo showing two shirts), each getting its own copy of the design.
   placements: Partial<Record<ShapeKey, Box[]>>;
