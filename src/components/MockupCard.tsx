@@ -344,7 +344,12 @@ export default function MockupCard({
         onPointerUp={onPointerUp}
         onPointerLeave={onPointerUp}
       >
-        <img className="mockup-img" src={mockup.src} draggable={false} />
+        <img
+          className="mockup-img"
+          src={mockup.src}
+          crossOrigin={mockup.src.startsWith("data:") ? undefined : "anonymous"}
+          draggable={false}
+        />
 
         {design && scale > 0 && (
           <DesignCanvas
