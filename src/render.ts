@@ -34,6 +34,7 @@ export interface RenderOptions {
   garment?: Garment; // light vs dark garment tunes the crease shadow/highlight
   mime?: string; // "image/jpeg" | "image/png"
   quality?: number; // 0..1 for jpeg
+  outScale?: number; // 0..1 — downscale the final image (lower quality/size)
 }
 
 // Render a single mockup with the design composited into the given box (with
@@ -70,8 +71,25 @@ export async function renderMockup(
     compositeDesignBox(ctx, bg, mockup.width, mockup.height, art, box, realism, garment);
   }
 
+  // Optionally downscale the finished image for a smaller file (quality knob).
+  let out: HTMLCanvasElement = canvas;
+  const outScale = opts.outScale ?? 1;
+  if (outScale > 0 && outScale < 1) {
+    const oc = document.createElement("canvas");
+    oc.width = Math.max(1, Math.round(canvas.width * outScale));
+    oc.height = Math.max(1, Math.round(canvas.height * outScale));
+    const octx = oc.getContext("2d")!;
+    if (mime === "image/jpeg") {
+      octx.fillStyle = "#ffffff";
+      octx.fillRect(0, 0, oc.width, oc.height);
+    }
+    octx.imageSmoothingQuality = "high";
+    octx.drawImage(canvas, 0, 0, oc.width, oc.height);
+    out = oc;
+  }
+
   return await new Promise<Blob>((resolve) =>
-    canvas.toBlob((b) => resolve(b!), mime, opts.quality)
+    out.toBlob((b) => resolve(b!), mime, opts.quality)
   );
 }
 

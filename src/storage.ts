@@ -11,6 +11,7 @@ export interface PersistedSettings {
   realism: number; // 0..1
   groupName: string; // base name for exported files
   format: "jpeg" | "png"; // export image format
+  quality: "low" | "medium" | "high"; // export quality/size
 }
 
 export interface PersistedState {
@@ -26,6 +27,7 @@ const DEFAULT_SETTINGS: PersistedSettings = {
   realism: 0.6,
   groupName: "group",
   format: "jpeg",
+  quality: "high",
 };
 
 // Older versions stored a single Box per shape instead of an array. Wrap any

@@ -31,6 +31,13 @@ import {
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
+// Export quality presets: output scale + JPEG compression.
+const QUALITY: Record<"low" | "medium" | "high", { scale: number; jpeg: number }> = {
+  low: { scale: 0.5, jpeg: 0.6 },
+  medium: { scale: 0.72, jpeg: 0.8 },
+  high: { scale: 1, jpeg: 0.92 },
+};
+
 // Build a default placement box for a mockup + shape from the preset aspect ratio.
 function defaultBox(mockup: Mockup, preset: ShapePreset): Box {
   const ratio = preset.w / preset.h;
@@ -56,6 +63,9 @@ export default function App() {
   const [brandFilter, setBrandFilter] = useState<"all" | Brand>("all");
   const [groupName, setGroupName] = useState("group");
   const [format, setFormat] = useState<"jpeg" | "png">("jpeg");
+  const [quality, setQuality] = useState<"low" | "medium" | "high">("high");
+  const [estimateMB, setEstimateMB] = useState<number | null>(null);
+  const [estimating, setEstimating] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [autoBusy, setAutoBusy] = useState(false);
   // Which mockups are ticked for export. New mockups start selected.
@@ -95,6 +105,7 @@ export default function App() {
       setRealism(s.settings.realism);
       setGroupName(s.settings.groupName);
       setFormat(s.settings.format);
+      setQuality(s.settings.quality);
       loaded.current = true;
     });
     return () => {
@@ -121,8 +132,8 @@ export default function App() {
   }, [cloud?.supabase, cloud?.orgId]);
 
   // Keep the latest state in a ref so we can flush it synchronously on close.
-  const latest = useRef({ mockups, presets, design, shape, realism, groupName, format, cloudActive: false });
-  latest.current = { mockups, presets, design, shape, realism, groupName, format, cloudActive: !!cloud };
+  const latest = useRef({ mockups, presets, design, shape, realism, groupName, format, quality, cloudActive: false });
+  latest.current = { mockups, presets, design, shape, realism, groupName, format, quality, cloudActive: !!cloud };
   const flush = () => {
     if (!loaded.current) return;
     const l = latest.current;
@@ -137,6 +148,7 @@ export default function App() {
         realism: l.realism,
         groupName: l.groupName,
         format: l.format,
+        quality: l.quality,
       },
     });
   };
@@ -148,7 +160,7 @@ export default function App() {
     window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(flush, 500);
     return () => window.clearTimeout(saveTimer.current);
-  }, [mockups, presets, design, shape, realism, groupName, format]);
+  }, [mockups, presets, design, shape, realism, groupName, format, quality]);
 
   // Also flush immediately when the tab is hidden or closing, so nothing is
   // lost if you quit within the debounce window.
@@ -487,6 +499,7 @@ export default function App() {
     const pad = String(targets.length).length;
     const mime = format === "jpeg" ? "image/jpeg" : "image/png";
     const ext = format === "jpeg" ? "jpg" : "png";
+    const q = QUALITY[quality];
 
     setExporting(true);
     try {
@@ -500,7 +513,8 @@ export default function App() {
           realism,
           garment: m.tone ?? "light",
           mime,
-          quality: 0.92,
+          quality: q.jpeg,
+          outScale: q.scale,
         });
         i += 1;
         files.push({
@@ -544,6 +558,39 @@ export default function App() {
     () => mockups.filter((m) => selected.has(m.id)).length,
     [mockups, selected]
   );
+
+  // The size estimate is only valid for the current inputs — clear it when any
+  // of them change so a stale number isn't shown.
+  useEffect(() => {
+    setEstimateMB(null);
+  }, [selected, mockups, format, quality, realism, design]);
+
+  // Render the selected mockups and total up their byte size (accurate — it
+  // renders exactly what export would produce).
+  async function calcSize() {
+    if (!design) return;
+    const targets = mockups.filter((m) => selected.has(m.id));
+    if (!targets.length) return;
+    setEstimating(true);
+    try {
+      const q = QUALITY[quality];
+      const mime = format === "jpeg" ? "image/jpeg" : "image/png";
+      let total = 0;
+      for (const m of targets) {
+        const blob = await renderMockup(m, boxesFor(m), design, {
+          realism,
+          garment: m.tone ?? "light",
+          mime,
+          quality: q.jpeg,
+          outScale: q.scale,
+        });
+        total += blob.size;
+      }
+      setEstimateMB(total / (1024 * 1024));
+    } finally {
+      setEstimating(false);
+    }
+  }
 
   const canExport = !!design && selectedCount > 0 && !exporting;
 
@@ -656,6 +703,18 @@ export default function App() {
               </button>
             ))}
           </div>
+          <label className="field-label">Quality</label>
+          <div className="shape-tabs">
+            {(["low", "medium", "high"] as const).map((qk) => (
+              <button
+                key={qk}
+                className={"shape-tab" + (quality === qk ? " on" : "")}
+                onClick={() => setQuality(qk)}
+              >
+                {qk}
+              </button>
+            ))}
+          </div>
           <label className="field-label">File name</label>
           <div className="name-row">
             <input
@@ -666,6 +725,20 @@ export default function App() {
             />
             <span className="name-preview">
               {(groupName.trim() || "group")}-1.{format === "jpeg" ? "jpg" : "png"}
+            </span>
+          </div>
+          <div className="size-row">
+            <button
+              className="mini"
+              disabled={!design || selectedCount === 0 || estimating}
+              onClick={calcSize}
+            >
+              {estimating ? "Calculating…" : "Estimate size"}
+            </button>
+            <span className="size-out">
+              {estimateMB == null
+                ? `${selectedCount} image${selectedCount === 1 ? "" : "s"}`
+                : `≈ ${estimateMB.toFixed(estimateMB < 10 ? 2 : 1)} MB total`}
             </span>
           </div>
           <button
