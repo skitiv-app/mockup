@@ -1011,11 +1011,15 @@ export default function App() {
                         return (
                           <section className="tone-group" key={tone}>
                             <div className="tone-head">
-                              <span className={"swatch " + tone} />
-                              <h3>
-                                {tone === "light" ? "Light color" : "Dark color"} mockups
-                              </h3>
-                              <span className="chip">{group.length}</span>
+                              {toneFilter === "all" && (
+                                <>
+                                  <span className={"swatch " + tone} />
+                                  <h3>
+                                    {tone === "light" ? "Light color" : "Dark color"} mockups
+                                  </h3>
+                                  <span className="chip">{group.length}</span>
+                                </>
+                              )}
                               {group.length > 0 && (
                                 <div className="tone-select">
                                   <button
