@@ -738,6 +738,16 @@ export default function App() {
             <div className="design-preview">
               <img src={design.src} />
               <span>{design.name}</span>
+              <button
+                className="icon-btn design-remove"
+                title="Remove design"
+                onClick={() => {
+                  setDesign(null);
+                  setAutoShapeNote(null);
+                }}
+              >
+                ✕
+              </button>
             </div>
           )}
         </section>

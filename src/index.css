@@ -1041,3 +1041,6 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.1); }
 /* Light/Dark tabs on the right side of the category tab bar */
 .tone-tabs { margin-left: auto; display: inline-flex; gap: 3px; align-items: flex-end; }
 .cat-tab.tone-tab { max-width: none; }
+
+.design-preview { position: relative; }
+.design-remove { margin-left: auto; }
