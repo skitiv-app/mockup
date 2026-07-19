@@ -83,3 +83,14 @@ export function pickShapeForRatio(
   }
   return best;
 }
+
+// How the design sits inside a placement frame: panned + zoomed, filling the
+// frame (cover). x/y are offsets as a fraction of the frame's width/height;
+// zoom multiplies the "fill" scale (1 = exactly fill).
+export interface DesignFrame {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+export const DEFAULT_DESIGN_FRAME: DesignFrame = { x: 0, y: 0, zoom: 1 };

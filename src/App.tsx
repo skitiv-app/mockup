@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Box, Brand, DesignAsset, Mockup, ShapeKey, ShapePreset } from "./types";
+import type { Box, Brand, DesignAsset, DesignFrame, Mockup, ShapeKey, ShapePreset } from "./types";
 import {
   SHAPE_KEYS,
   DEFAULT_PRESETS,
   BRANDS,
   DEFAULT_BRAND,
   pickShapeForRatio,
+  DEFAULT_DESIGN_FRAME,
 } from "./types";
 import { loadState, saveState } from "./storage";
 import {
@@ -71,6 +72,12 @@ export default function App() {
   const [groupName, setGroupName] = useState("group");
   const [format, setFormat] = useState<"jpeg" | "png">("jpeg");
   const [quality, setQuality] = useState<"low" | "medium" | "high">("high");
+  // How the design sits inside the frame, remembered per format.
+  const [designFrames, setDesignFrames] = useState<Record<ShapeKey, DesignFrame>>({
+    short: { ...DEFAULT_DESIGN_FRAME },
+    square: { ...DEFAULT_DESIGN_FRAME },
+    long: { ...DEFAULT_DESIGN_FRAME },
+  });
   const [estimateMB, setEstimateMB] = useState<number | null>(null);
   const [estimating, setEstimating] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -94,6 +101,14 @@ export default function App() {
   // one. The header control sets the global shape and clears all overrides.
   const [cardShape, setCardShape] = useState<Record<string, ShapeKey>>({});
   const shapeFor = (id: string): ShapeKey => cardShape[id] ?? shape;
+  const frameFor = (sh: ShapeKey): DesignFrame =>
+    designFrames[sh] ?? DEFAULT_DESIGN_FRAME;
+  function updateFrame(sh: ShapeKey, patch: Partial<DesignFrame>) {
+    setDesignFrames((prev) => ({
+      ...prev,
+      [sh]: { ...(prev[sh] ?? DEFAULT_DESIGN_FRAME), ...patch },
+    }));
+  }
   function setShapeForCard(id: string, s: ShapeKey) {
     setCardShape((prev) => ({ ...prev, [id]: s }));
   }
@@ -126,6 +141,7 @@ export default function App() {
       setGroupName(s.settings.groupName);
       setFormat(s.settings.format);
       setQuality(s.settings.quality);
+      setDesignFrames(s.settings.designFrames);
       loaded.current = true;
     });
     return () => {
@@ -160,8 +176,8 @@ export default function App() {
   }, [cloud?.supabase, cloud?.orgId]);
 
   // Keep the latest state in a ref so we can flush it synchronously on close.
-  const latest = useRef({ mockups, presets, design, shape, realism, groupName, format, quality, cloudActive: false });
-  latest.current = { mockups, presets, design, shape, realism, groupName, format, quality, cloudActive: !!cloud };
+  const latest = useRef({ mockups, presets, design, shape, realism, groupName, format, quality, designFrames, cloudActive: false });
+  latest.current = { mockups, presets, design, shape, realism, groupName, format, quality, designFrames, cloudActive: !!cloud };
   const flush = () => {
     if (!loaded.current) return;
     const l = latest.current;
@@ -177,6 +193,7 @@ export default function App() {
         groupName: l.groupName,
         format: l.format,
         quality: l.quality,
+        designFrames: l.designFrames,
       },
     });
   };
@@ -188,7 +205,7 @@ export default function App() {
     window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(flush, 500);
     return () => window.clearTimeout(saveTimer.current);
-  }, [mockups, presets, design, shape, realism, groupName, format, quality]);
+  }, [mockups, presets, design, shape, realism, groupName, format, quality, designFrames]);
 
   // Also flush immediately when the tab is hidden or closing, so nothing is
   // lost if you quit within the debounce window.
@@ -533,6 +550,7 @@ export default function App() {
         realism,
         garment: m.tone ?? "light",
         mime: "image/png",
+        frame: frameFor(shapeFor(m.id)),
       });
       await navigator.clipboard.write([
         new ClipboardItem({ "image/png": blob }),
@@ -587,6 +605,7 @@ export default function App() {
           mime,
           quality: q.jpeg,
           outScale: q.scale,
+          frame: frameFor(shapeFor(m.id)),
         });
         i += 1;
         files.push({
@@ -662,6 +681,7 @@ export default function App() {
           mime,
           quality: q.jpeg,
           outScale: q.scale,
+          frame: frameFor(shapeFor(m.id)),
         });
         total += blob.size;
       }
@@ -735,6 +755,90 @@ export default function App() {
             />
           </label>
           {design && (
+            <>
+              <label className="field-label">
+                Framing — {shape} frame (drag to position)
+              </label>
+              <div
+                className="frame-box"
+                style={{ aspectRatio: `${presets[shape].w} / ${presets[shape].h}` }}
+                onPointerDown={(e) => {
+                  const el = e.currentTarget;
+                  el.setPointerCapture(e.pointerId);
+                  const rect = el.getBoundingClientRect();
+                  const startX = e.clientX;
+                  const startY = e.clientY;
+                  const f0 = frameFor(shape);
+                  const move = (ev: PointerEvent) => {
+                    const dx = (ev.clientX - startX) / rect.width;
+                    const dy = (ev.clientY - startY) / rect.height;
+                    updateFrame(shape, {
+                      x: Math.max(-2, Math.min(2, f0.x + dx)),
+                      y: Math.max(-2, Math.min(2, f0.y + dy)),
+                    });
+                  };
+                  const up = () => {
+                    el.removeEventListener("pointermove", move);
+                    el.removeEventListener("pointerup", up);
+                  };
+                  el.addEventListener("pointermove", move);
+                  el.addEventListener("pointerup", up);
+                }}
+              >
+                {(() => {
+                  const fr = frameFor(shape);
+                  const artRatio = design.width / design.height;
+                  const boxRatio = presets[shape].w / presets[shape].h;
+                  let wPct: number, hPct: number;
+                  if (boxRatio > artRatio) {
+                    wPct = 100;
+                    hPct = 100 * (boxRatio / artRatio);
+                  } else {
+                    hPct = 100;
+                    wPct = 100 * (artRatio / boxRatio);
+                  }
+                  wPct *= fr.zoom;
+                  hPct *= fr.zoom;
+                  return (
+                    <img
+                      src={design.src}
+                      draggable={false}
+                      style={{
+                        position: "absolute",
+                        width: `${wPct}%`,
+                        height: `${hPct}%`,
+                        left: `${(100 - wPct) / 2 + fr.x * 100}%`,
+                        top: `${(100 - hPct) / 2 + fr.y * 100}%`,
+                      }}
+                    />
+                  );
+                })()}
+              </div>
+              <label className="slider frame-zoom">
+                <span className="slider-head">
+                  Zoom <b>{Math.round(frameFor(shape).zoom * 100)}%</b>
+                </span>
+                <input
+                  type="range"
+                  min={0.3}
+                  max={3}
+                  step={0.01}
+                  value={frameFor(shape).zoom}
+                  onChange={(e) =>
+                    updateFrame(shape, { zoom: Number(e.target.value) })
+                  }
+                />
+              </label>
+              <button
+                className="mini"
+                onClick={() => updateFrame(shape, { ...DEFAULT_DESIGN_FRAME })}
+              >
+                Reset framing
+              </button>
+              <p className="hint">
+                What you see in this box is exactly what prints inside the{" "}
+                <b>{shape}</b> frame on every mockup.
+              </p>
             <div className="design-preview">
               <img src={design.src} />
               <span>{design.name}</span>
@@ -749,6 +853,7 @@ export default function App() {
                 ✕
               </button>
             </div>
+            </>
           )}
         </section>
 
@@ -1060,6 +1165,7 @@ export default function App() {
                                     shape={shapeFor(m.id)}
                                     boxes={boxesFor(m)}
                                     design={design}
+                                    frame={frameFor(shapeFor(m.id))}
                                     realism={realism}
                                     garment={m.tone ?? "light"}
                                     selected={selected.has(m.id)}

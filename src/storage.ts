@@ -1,4 +1,4 @@
-import type { Box, DesignAsset, Mockup, ShapeKey, ShapePreset } from "./types";
+import type { Box, DesignAsset, DesignFrame, Mockup, ShapeKey, ShapePreset } from "./types";
 import { DEFAULT_PRESETS, SHAPE_KEYS } from "./types";
 
 const DB_NAME = "mockup-studio";
@@ -12,6 +12,7 @@ export interface PersistedSettings {
   groupName: string; // base name for exported files
   format: "jpeg" | "png"; // export image format
   quality: "low" | "medium" | "high"; // export quality/size
+  designFrames: Record<ShapeKey, DesignFrame>; // per-format pan/zoom of the design
 }
 
 export interface PersistedState {
@@ -28,6 +29,11 @@ const DEFAULT_SETTINGS: PersistedSettings = {
   groupName: "group",
   format: "jpeg",
   quality: "high",
+  designFrames: {
+    short: { x: 0, y: 0, zoom: 1 },
+    square: { x: 0, y: 0, zoom: 1 },
+    long: { x: 0, y: 0, zoom: 1 },
+  },
 };
 
 // Older versions stored a single Box per shape instead of an array. Wrap any
@@ -58,7 +64,14 @@ function normalize(v: Partial<PersistedState> | undefined): PersistedState {
     mockups: migrateMockups(v?.mockups ?? []),
     presets: v?.presets ?? DEFAULT_PRESETS,
     design: v?.design ?? null,
-    settings: { ...DEFAULT_SETTINGS, ...(v?.settings ?? {}) },
+    settings: {
+      ...DEFAULT_SETTINGS,
+      ...(v?.settings ?? {}),
+      designFrames: {
+        ...DEFAULT_SETTINGS.designFrames,
+        ...((v?.settings as any)?.designFrames ?? {}),
+      },
+    },
   };
 }
 

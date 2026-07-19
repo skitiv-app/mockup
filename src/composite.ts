@@ -1,5 +1,6 @@
-import type { Box } from "./types";
-import { fitInBox } from "./render";
+import type { Box, DesignFrame } from "./types";
+import { DEFAULT_DESIGN_FRAME } from "./types";
+import { coverInBox } from "./render";
 
 // Small decoded-image cache so the preview doesn't re-decode on every redraw.
 const imgCache = new Map<string, HTMLImageElement>();
@@ -39,9 +40,10 @@ export function compositeDesignBox(
   art: HTMLImageElement,
   box: Box,
   realism: number,
-  garment: Garment = "light"
+  garment: Garment = "light",
+  frame: DesignFrame = DEFAULT_DESIGN_FRAME
 ) {
-  const fit = fitInBox(box, art.width, art.height);
+  const fit = coverInBox(box, art.width, art.height, frame);
   const bw = Math.max(2, Math.round(box.w));
   const bh = Math.max(2, Math.round(box.h));
   const cx = box.x + box.w / 2;

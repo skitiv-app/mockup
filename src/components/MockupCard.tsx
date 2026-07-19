@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { Box, DesignAsset, Mockup, ShapeKey } from "../types";
+import type { Box, DesignAsset, DesignFrame, Mockup, ShapeKey } from "../types";
 import { SHAPE_KEYS } from "../types";
 import { compositeDesignBox, loadImageCached, type Garment } from "../composite";
 
@@ -8,6 +8,7 @@ import { compositeDesignBox, loadImageCached, type Garment } from "../composite"
 function DesignCanvas({
   mockupSrc,
   design,
+  frame,
   boxes,
   scale,
   width,
@@ -17,6 +18,7 @@ function DesignCanvas({
 }: {
   mockupSrc: string;
   design: DesignAsset;
+  frame: DesignFrame;
   boxes: Box[];
   scale: number;
   width: number;
@@ -46,7 +48,7 @@ function DesignCanvas({
             h: b.h * scale * dpr,
             rotation: b.rotation ?? 0,
           };
-          compositeDesignBox(ctx, mk, pixelW, pixelH, art, tb, realism, garment);
+          compositeDesignBox(ctx, mk, pixelW, pixelH, art, tb, realism, garment, frame);
         }
       }
     );
@@ -55,7 +57,7 @@ function DesignCanvas({
     };
     // boxKey captures box geometry changes (drag/resize/rotate).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mockupSrc, design.src, boxKey, scale, pixelW, pixelH, dpr, realism, garment]);
+  }, [mockupSrc, design.src, boxKey, scale, pixelW, pixelH, dpr, realism, garment, frame.x, frame.y, frame.zoom]);
 
   return (
     <canvas
@@ -78,6 +80,7 @@ interface Props {
   shape: ShapeKey;
   boxes: Box[]; // current placement boxes for the active shape
   design: DesignAsset | null;
+  frame: DesignFrame;
   realism: number; // 0..1 — how much the print sinks into the fabric
   garment: Garment; // light vs dark garment tone
   selected: boolean;
@@ -106,6 +109,7 @@ export default function MockupCard({
   shape,
   boxes,
   design,
+  frame,
   realism,
   garment,
   selected,
@@ -371,6 +375,7 @@ export default function MockupCard({
           <DesignCanvas
             mockupSrc={mockup.src}
             design={design}
+            frame={frame}
             boxes={boxes}
             scale={scale}
             width={stageW}

@@ -1,8 +1,31 @@
-import type { Box, DesignAsset, Mockup } from "./types";
+import type { Box, DesignAsset, DesignFrame, Mockup } from "./types";
+import { DEFAULT_DESIGN_FRAME } from "./types";
 import { compositeDesignBox, type Garment } from "./composite";
 
 // Compute where the design is drawn inside a placement box, preserving the
 // design's aspect ratio ("contain" fit, centered in the box).
+// Cover-fit: the design scales up until it FILLS the frame, then is panned and
+// zoomed. Anything past the frame edge is cropped (the design buffer is exactly
+// frame-sized, so overflow is clipped for free).
+export function coverInBox(
+  box: Box,
+  designW: number,
+  designH: number,
+  frame: DesignFrame = DEFAULT_DESIGN_FRAME
+) {
+  const base = Math.max(box.w / designW, box.h / designH);
+  const scale = base * (frame.zoom || 1);
+  const w = designW * scale;
+  const h = designH * scale;
+  return {
+    x: box.x + (box.w - w) / 2 + (frame.x || 0) * box.w,
+    y: box.y + (box.h - h) / 2 + (frame.y || 0) * box.h,
+    w,
+    h,
+  };
+}
+
+// Legacy "contain" fit (kept for reference/back-compat).
 export function fitInBox(box: Box, designW: number, designH: number) {
   const scale = Math.min(box.w / designW, box.h / designH);
   const drawW = designW * scale;
@@ -35,6 +58,7 @@ export interface RenderOptions {
   mime?: string; // "image/jpeg" | "image/png"
   quality?: number; // 0..1 for jpeg
   outScale?: number; // 0..1 — downscale the final image (lower quality/size)
+  frame?: DesignFrame; // how the design sits inside each placement box
 }
 
 // Render a single mockup with the design composited into the given box (with
@@ -68,7 +92,7 @@ export async function renderMockup(
   const realism = Math.min(1, Math.max(0, opts.realism ?? 0.6));
   const garment = opts.garment ?? "light";
   for (const box of boxes) {
-    compositeDesignBox(ctx, bg, mockup.width, mockup.height, art, box, realism, garment);
+    compositeDesignBox(ctx, bg, mockup.width, mockup.height, art, box, realism, garment, opts.frame);
   }
 
   // Optionally downscale the finished image for a smaller file (quality knob).
