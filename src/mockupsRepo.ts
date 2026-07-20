@@ -2,7 +2,61 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Brand, Mockup, ShapeKey, Box } from "./types";
 
 const BUCKET = "mockups";
-const SIGNED_TTL = 3600; // 1 hour
+const SIGNED_TTL = 60 * 60 * 24 * 7; // 7 days
+const URL_CACHE_KEY = "mockup-signed-urls";
+const URL_REFRESH_MARGIN = 60 * 60 * 1000; // refresh when <1h left
+
+type UrlCache = Record<string, { url: string; exp: number }>;
+
+function readUrlCache(): UrlCache {
+  try {
+    return JSON.parse(localStorage.getItem(URL_CACHE_KEY) || "{}") as UrlCache;
+  } catch {
+    return {};
+  }
+}
+
+function writeUrlCache(c: UrlCache) {
+  try {
+    localStorage.setItem(URL_CACHE_KEY, JSON.stringify(c));
+  } catch {
+    /* quota */
+  }
+}
+
+// Returns a signed URL per path, reusing cached URLs so the browser can serve
+// the image from its HTTP cache instead of refetching on every load.
+async function signPaths(
+  supabase: SupabaseClient,
+  paths: string[]
+): Promise<Record<string, string>> {
+  const cache = readUrlCache();
+  const now = Date.now();
+  const out: Record<string, string> = {};
+  const missing: string[] = [];
+
+  for (const p of paths) {
+    const hit = cache[p];
+    if (hit && hit.exp - now > URL_REFRESH_MARGIN) out[p] = hit.url;
+    else missing.push(p);
+  }
+
+  if (missing.length) {
+    const { data } = await supabase.storage
+      .from(BUCKET)
+      .createSignedUrls(missing, SIGNED_TTL);
+    for (const item of data ?? []) {
+      if (!item.signedUrl || !item.path) continue;
+      out[item.path] = item.signedUrl;
+      cache[item.path] = {
+        url: item.signedUrl,
+        exp: now + SIGNED_TTL * 1000,
+      };
+    }
+    writeUrlCache(cache);
+  }
+  return out;
+}
 
 // Row shape in the `mockups` table.
 interface Row {
@@ -18,6 +72,62 @@ interface Row {
   categories: string[] | null;
   placements: Partial<Record<ShapeKey, Box[]>>;
   locked: boolean;
+}
+
+const THUMB_MAX = 900; // longest edge, px
+const THUMB_QUALITY = 0.82;
+
+// Thumbnails live next to the original, so no extra DB column is needed.
+function thumbPathFor(imagePath: string): string {
+  return imagePath.replace(/\.[^./]+$/, "") + "_thumb.webp";
+}
+
+function loadImg(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    if (!src.startsWith("data:")) img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("image load failed"));
+    img.src = src;
+  });
+}
+
+// Downscale to a small WebP. ~95% smaller than the full-res PNG.
+async function makeThumbBlob(src: string): Promise<Blob | null> {
+  try {
+    const img = await loadImg(src);
+    const scale = Math.min(1, THUMB_MAX / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(img, 0, 0, w, h);
+    return await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/webp", THUMB_QUALITY)
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function uploadThumb(
+  supabase: SupabaseClient,
+  imagePath: string,
+  src: string
+): Promise<void> {
+  const blob = await makeThumbBlob(src);
+  if (!blob) return;
+  await supabase.storage
+    .from(BUCKET)
+    .upload(thumbPathFor(imagePath), blob, {
+      upsert: true,
+      contentType: "image/webp",
+      cacheControl: "31536000",
+    });
 }
 
 function dataUrlToBlob(dataUrl: string): Blob {
@@ -41,15 +151,18 @@ export async function loadMockupsFromDb(
   if (error) throw error;
 
   const rows = (data ?? []) as Row[];
+  const urls = await signPaths(supabase, [
+    ...rows.map((r) => r.image_path),
+    ...rows.map((r) => thumbPathFor(r.image_path)),
+  ]);
   const out: Mockup[] = [];
   for (const r of rows) {
-    const { data: signed } = await supabase.storage
-      .from(BUCKET)
-      .createSignedUrl(r.image_path, SIGNED_TTL);
+    const full = urls[r.image_path] ?? "";
     out.push({
       id: r.id,
       name: r.name,
-      src: signed?.signedUrl ?? "",
+      src: full,
+      thumbSrc: urls[thumbPathFor(r.image_path)] || full,
       width: r.width,
       height: r.height,
       tone: r.tone ?? "light",
@@ -67,6 +180,29 @@ export async function loadMockupsFromDb(
   return out;
 }
 
+// Existing mockups predate thumbnails (thumbSrc === src). Generate and upload
+// their previews in the background, one at a time so the tab stays responsive.
+// Silently no-ops if the user lacks write access.
+export async function backfillThumbnails(
+  supabase: SupabaseClient,
+  mockups: Mockup[],
+  onDone?: (id: string, thumbSrc: string) => void
+): Promise<void> {
+  const pending = mockups.filter(
+    (m) => m.imagePath && (!m.thumbSrc || m.thumbSrc === m.src)
+  );
+  for (const m of pending) {
+    try {
+      await uploadThumb(supabase, m.imagePath!, m.src);
+      const path = thumbPathFor(m.imagePath!);
+      const signed = await signPaths(supabase, [path]);
+      if (signed[path]) onDone?.(m.id, signed[path]);
+    } catch {
+      /* keep going; card falls back to the full image */
+    }
+  }
+}
+
 // Save a mockup on lock: upload its image once, then upsert the row (frames +
 // metadata + locked). Skips re-upload if the image is already in storage.
 export async function saveMockupToDb(
@@ -81,9 +217,16 @@ export async function saveMockupToDb(
     const blob = dataUrlToBlob(mockup.src);
     const { error: upErr } = await supabase.storage
       .from(BUCKET)
-      .upload(imagePath, blob, { upsert: true, contentType: "image/png" });
+      .upload(imagePath, blob, {
+        upsert: true,
+        contentType: "image/png",
+        cacheControl: "31536000",
+      });
     if (upErr) throw upErr;
   }
+
+  // Preview image for the cards. Non-fatal if it fails.
+  await uploadThumb(supabase, imagePath, mockup.src).catch(() => {});
 
   const { error } = await supabase.from("mockups").upsert({
     id: mockup.id,
@@ -123,7 +266,9 @@ export async function deleteMockupFromDb(
   mockup: Mockup
 ): Promise<void> {
   if (mockup.imagePath) {
-    await supabase.storage.from(BUCKET).remove([mockup.imagePath]);
+    await supabase.storage
+      .from(BUCKET)
+      .remove([mockup.imagePath, thumbPathFor(mockup.imagePath)]);
   }
   const { error } = await supabase.from("mockups").delete().eq("id", mockup.id);
   if (error) throw error;

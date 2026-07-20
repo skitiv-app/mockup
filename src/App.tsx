@@ -32,6 +32,7 @@ import {
   updateMockupCategories,
   loadCategoryList,
   saveCategoryList,
+  backfillThumbnails,
 } from "./mockupsRepo";
 
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -167,6 +168,14 @@ export default function App() {
         const merged = Array.from(new Set([...(saved ?? []), ...used]));
         if (!cancelled && merged.length)
           setCategoryList(saved && saved.length ? Array.from(new Set([...saved, ...used])) : merged);
+
+        // One-time: build previews for mockups saved before thumbnails existed.
+        backfillThumbnails(cloud.supabase, remote, (id, thumbSrc) => {
+          if (cancelled) return;
+          setMockups((list) =>
+            list.map((m) => (m.id === id ? { ...m, thumbSrc } : m))
+          );
+        }).catch(() => {});
       })
       .catch((e) => flash("Couldn't load cloud mockups: " + (e?.message ?? e)));
     return () => {

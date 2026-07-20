@@ -40,6 +40,9 @@ export interface Mockup {
   // Storage path in Supabase ("{org_id}/{id}.png") once the mockup is saved.
   // Present means the image is already uploaded (don't re-upload on lock).
   imagePath?: string;
+  // Small WebP preview used for on-screen cards. Exports always use `src`.
+  // Falls back to `src` when no thumbnail exists yet.
+  thumbSrc?: string;
 }
 
 export interface DesignAsset {

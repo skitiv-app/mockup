@@ -366,14 +366,16 @@ export default function MockupCard({
       >
         <img
           className="mockup-img"
-          src={mockup.src}
+          src={mockup.thumbSrc || mockup.src}
           crossOrigin={mockup.src.startsWith("data:") ? undefined : "anonymous"}
+          loading="lazy"
+          decoding="async"
           draggable={false}
         />
 
         {design && scale > 0 && (
           <DesignCanvas
-            mockupSrc={mockup.src}
+            mockupSrc={mockup.thumbSrc || mockup.src}
             design={design}
             frame={frame}
             boxes={boxes}
