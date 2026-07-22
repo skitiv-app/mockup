@@ -1061,4 +1061,4 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.1); }
 .frame-box img { pointer-events: none; user-select: none; }
 .frame-zoom { margin-bottom: 8px; }
 
-.frame-actions { display: flex; gap: 6px; }
+.frame-actions { display: flex; gap: 6px; flex-wrap: wrap; }

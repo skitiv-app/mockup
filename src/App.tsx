@@ -841,17 +841,24 @@ export default function App() {
               <div className="frame-actions">
                 <button
                   className="mini"
-                  title="Center the design (keeps zoom)"
-                  onClick={() => updateFrame(shape, { x: 0, y: 0 })}
+                  title="Center left–right (keeps vertical position + zoom)"
+                  onClick={() => updateFrame(shape, { x: 0 })}
                 >
-                  Center
+                  ⇔ Center H
+                </button>
+                <button
+                  className="mini"
+                  title="Center top–bottom (keeps horizontal position + zoom)"
+                  onClick={() => updateFrame(shape, { y: 0 })}
+                >
+                  ⇕ Center V
                 </button>
                 <button
                   className="mini"
                   title="Reset position and zoom"
                   onClick={() => updateFrame(shape, { ...DEFAULT_DESIGN_FRAME })}
                 >
-                  Reset framing
+                  Reset
                 </button>
               </div>
               <p className="hint">
