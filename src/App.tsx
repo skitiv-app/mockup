@@ -838,12 +838,22 @@ export default function App() {
                   }
                 />
               </label>
-              <button
-                className="mini"
-                onClick={() => updateFrame(shape, { ...DEFAULT_DESIGN_FRAME })}
-              >
-                Reset framing
-              </button>
+              <div className="frame-actions">
+                <button
+                  className="mini"
+                  title="Center the design (keeps zoom)"
+                  onClick={() => updateFrame(shape, { x: 0, y: 0 })}
+                >
+                  Center
+                </button>
+                <button
+                  className="mini"
+                  title="Reset position and zoom"
+                  onClick={() => updateFrame(shape, { ...DEFAULT_DESIGN_FRAME })}
+                >
+                  Reset framing
+                </button>
+              </div>
               <p className="hint">
                 What you see in this box is exactly what prints inside the{" "}
                 <b>{shape}</b> frame on every mockup.
