@@ -602,13 +602,11 @@ export default function App() {
 
     setExporting(true);
     try {
-      // Render everything first, then hand the files off together — this keeps
-      // the fallback downloads in one burst so the browser treats them as a
-      // single "download these files" action instead of prompting per file.
-      const files: { name: string; blob: Blob }[] = [];
-      let i = 0;
-      for (const m of targets) {
-        const blob = await renderMockup(m, boxesFor(m), design, {
+      const total = targets.length;
+      const nameAt = (i: number) =>
+        `${base}-${String(i).padStart(pad, "0")}.${ext}`;
+      const render1 = (m: (typeof targets)[number]) =>
+        renderMockup(m, boxesFor(m), design, {
           realism,
           garment: m.tone ?? "light",
           mime,
@@ -616,39 +614,47 @@ export default function App() {
           outScale: q.scale,
           frame: frameFor(shapeFor(m.id)),
         });
-        i += 1;
-        files.push({
-          name: `${base}-${String(i).padStart(pad, "0")}.${ext}`,
-          blob,
-        });
-      }
 
       if (dir) {
-        for (const f of files) {
-          const fh = await dir.getFileHandle(f.name, { create: true });
+        // Stream: render → write → drop the blob → yield. Never holds more than
+        // one full-res image in memory, and the yield keeps the tab responsive.
+        let i = 0;
+        for (const m of targets) {
+          i += 1;
+          const blob = await render1(m);
+          const fh = await dir.getFileHandle(nameAt(i), { create: true });
           const w = await fh.createWritable();
-          await w.write(f.blob);
+          await w.write(blob);
           await w.close();
+          await delay(0); // let the browser breathe / GC between images
         }
-        flash(`Saved ${files.length} images to your folder ✓`);
-      } else if (files.length === 1) {
-        // Single image — just download it directly.
-        downloadBlob(files[0].blob, files[0].name);
+        flash(`Saved ${total} images to your folder ✓`);
+      } else if (total === 1) {
+        downloadBlob(await render1(targets[0]), nameAt(1));
         flash("Downloaded 1 image ✓");
       } else {
-        // No folder API (not Chrome/Edge) — bundle into ONE zip so the browser
-        // asks once, not per image.
+        // No folder API — bundle into ONE zip (one prompt). STORE (no deflate)
+        // is far lighter on CPU/RAM since JP/PNG are already compressed.
         const zip = new JSZip();
-        for (const f of files) zip.file(f.name, f.blob);
-        const blob = await zip.generateAsync({ type: "blob" });
+        let i = 0;
+        for (const m of targets) {
+          i += 1;
+          const blob = await render1(m);
+          zip.file(nameAt(i), blob);
+          await delay(0);
+        }
+        const blob = await zip.generateAsync({
+          type: "blob",
+          compression: "STORE",
+        });
         downloadBlob(blob, `${base}.zip`);
-        flash(`Saved ${files.length} images as ${base}.zip ✓`);
+        flash(`Saved ${total} images as ${base}.zip ✓`);
       }
       // Record this export for the workspace's activity report (owner view).
       if (cloud) {
         api("/api/log-export", {
           method: "POST",
-          body: { count: files.length, format, quality, email: user?.email },
+          body: { count: total, format, quality, email: user?.email },
         }).catch(() => {});
       }
     } finally {
@@ -693,6 +699,7 @@ export default function App() {
           frame: frameFor(shapeFor(m.id)),
         });
         total += blob.size;
+        await delay(0);
       }
       setEstimateMB(total / (1024 * 1024));
     } finally {

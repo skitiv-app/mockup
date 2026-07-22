@@ -112,9 +112,13 @@ export async function renderMockup(
     out = oc;
   }
 
-  return await new Promise<Blob>((resolve) =>
+  const blob = await new Promise<Blob>((resolve) =>
     out.toBlob((b) => resolve(b!), mime, opts.quality)
   );
+  // Release the big canvases right away instead of waiting for GC.
+  canvas.width = canvas.height = 0;
+  if (out !== canvas) out.width = out.height = 0;
+  return blob;
 }
 
 // Trigger a browser download for a blob.

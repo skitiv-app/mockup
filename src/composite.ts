@@ -78,7 +78,9 @@ export function compositeDesignBox(
     g.filter = `grayscale(1) blur(${Math.max(1, Math.round(blur))}px)`;
     g.drawImage(mockup, 0, 0, Tw, Th);
     g.restore();
-    return g.getImageData(0, 0, bw, bh).data;
+    const px = g.getImageData(0, 0, bw, bh).data;
+    c.width = c.height = 0; // release immediately
+    return px;
   };
   const Lf = sampleGray(min * 0.012);
   const Lb = sampleGray(min * 0.05);
