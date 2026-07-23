@@ -102,10 +102,9 @@ export default function App() {
   // one. The header control sets the global shape and clears all overrides.
   const [cardShape, setCardShape] = useState<Record<string, ShapeKey>>({});
   const shapeFor = (id: string): ShapeKey => cardShape[id] ?? shape;
-  // Members can't change realism; always render them at full 100%.
-  useEffect(() => {
-    if (!isOwner) setRealism(1);
-  }, [isOwner]);
+  // Members can't change realism — they always render at full 100%. Computed
+  // here so it can't be clobbered by the async settings load.
+  const effRealism = isOwner ? realism : 1;
 
   const frameFor = (sh: ShapeKey): DesignFrame =>
     designFrames[sh] ?? DEFAULT_DESIGN_FRAME;
@@ -561,7 +560,7 @@ export default function App() {
       // ClipboardItem accepts the blob Promise, keeping it inside the click
       // gesture while the image renders.
       const blob = renderMockup(m, boxesFor(m), design, {
-        realism,
+        realism: effRealism,
         garment: m.tone ?? "light",
         mime: "image/png",
         frame: frameFor(shapeFor(m.id)),
@@ -612,7 +611,7 @@ export default function App() {
         `${base}-${String(i).padStart(pad, "0")}.${ext}`;
       const render1 = (m: (typeof targets)[number]) =>
         renderMockup(m, boxesFor(m), design, {
-          realism,
+          realism: effRealism,
           garment: m.tone ?? "light",
           mime,
           quality: q.jpeg,
@@ -696,7 +695,7 @@ export default function App() {
       let total = 0;
       for (const m of targets) {
         const blob = await renderMockup(m, boxesFor(m), design, {
-          realism,
+          realism: effRealism,
           garment: m.tone ?? "light",
           mime,
           quality: q.jpeg,
@@ -899,14 +898,14 @@ export default function App() {
           <h2>3 · Realism</h2>
           <label className="slider">
             <span className="slider-head">
-              Print into fabric <b>{Math.round(realism * 100)}%</b>
+              Print into fabric <b>{Math.round(effRealism * 100)}%</b>
             </span>
             <input
               type="range"
               min={0}
               max={1}
               step={0.05}
-              value={realism}
+              value={effRealism}
               disabled={!isOwner}
               onChange={(e) => setRealism(Number(e.target.value))}
             />
@@ -1204,7 +1203,7 @@ export default function App() {
                                     boxes={boxesFor(m)}
                                     design={design}
                                     frame={frameFor(shapeFor(m.id))}
-                                    realism={realism}
+                                    realism={effRealism}
                                     garment={m.tone ?? "light"}
                                     selected={selected.has(m.id)}
                                     hasMany={mockups.length > 1}
