@@ -102,6 +102,11 @@ export default function App() {
   // one. The header control sets the global shape and clears all overrides.
   const [cardShape, setCardShape] = useState<Record<string, ShapeKey>>({});
   const shapeFor = (id: string): ShapeKey => cardShape[id] ?? shape;
+  // Members can't change realism; always render them at full 100%.
+  useEffect(() => {
+    if (!isOwner) setRealism(1);
+  }, [isOwner]);
+
   const frameFor = (sh: ShapeKey): DesignFrame =>
     designFrames[sh] ?? DEFAULT_DESIGN_FRAME;
   function updateFrame(sh: ShapeKey, patch: Partial<DesignFrame>) {
