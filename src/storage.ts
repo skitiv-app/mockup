@@ -25,7 +25,7 @@ export interface PersistedState {
 
 const DEFAULT_SETTINGS: PersistedSettings = {
   shape: "short",
-  realism: 0.6,
+  realism: 1,
   groupName: "group",
   format: "jpeg",
   quality: "high",

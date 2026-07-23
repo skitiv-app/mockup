@@ -65,7 +65,7 @@ export default function App() {
     useState<Record<ShapeKey, ShapePreset>>(DEFAULT_PRESETS);
   const [shape, setShape] = useState<ShapeKey>("short");
   const [design, setDesign] = useState<DesignAsset | null>(null);
-  const [realism, setRealism] = useState(0.6);
+  const [realism, setRealism] = useState(1);
   const [toneFilter, setToneFilter] = useState<"all" | "light" | "dark">("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [categoryList, setCategoryList] = useState<string[]>(["Comfort Colors", "Gildan"]);
