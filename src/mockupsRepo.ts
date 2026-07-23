@@ -3,7 +3,8 @@ import type { Brand, Mockup, ShapeKey, Box } from "./types";
 
 const BUCKET = "mockups";
 const SIGNED_TTL = 60 * 60 * 24 * 7; // 7 days
-const URL_CACHE_KEY = "mockup-signed-urls";
+const URL_CACHE_KEY =
+  "mockup-signed-urls:" + (import.meta.env.VITE_SUPABASE_URL || "");
 const URL_REFRESH_MARGIN = 60 * 60 * 1000; // refresh when <1h left
 
 type UrlCache = Record<string, { url: string; exp: number }>;
