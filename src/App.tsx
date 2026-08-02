@@ -101,7 +101,12 @@ export default function App() {
   // Per-card shape override. A card uses its own shape if set, else the global
   // one. The header control sets the global shape and clears all overrides.
   const [cardShape, setCardShape] = useState<Record<string, ShapeKey>>({});
-  const shapeFor = (id: string): ShapeKey => cardShape[id] ?? shape;
+  const shapeFor = (id: string): ShapeKey => {
+    // Locked mockups are driven only by the header "Shape (all)" control.
+    const m = mockups.find((x) => x.id === id);
+    if (m?.locked) return shape;
+    return cardShape[id] ?? shape;
+  };
   // Members can't change realism — they always render at full 100%. Computed
   // here so it can't be clobbered by the async settings load.
   const effRealism = isOwner ? realism : 1;

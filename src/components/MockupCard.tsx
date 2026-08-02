@@ -310,6 +310,7 @@ export default function MockupCard({
         </div>
       </div>
 
+      {!locked && (
       <div className="shape-badges">
         {SHAPE_KEYS.map((k) => {
           const placed = !!mockup.placements[k]?.length;
@@ -329,6 +330,7 @@ export default function MockupCard({
           );
         })}
       </div>
+      )}
 
       <div className="cat-row">
         {isOwner
