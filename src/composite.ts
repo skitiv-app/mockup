@@ -26,8 +26,10 @@ const clamp8 = (v: number) => (v < 0 ? 0 : v > 255 ? 255 : v);
 // How much the print soaks into the fabric (grain + garment colour show
 // through) and how faded/desaturated it reads. Both scale with realism.
 // Tune these to taste — higher = more vintage/garment-dye.
-const ABSORB_STRENGTH = 0.14;
-const DESAT_STRENGTH = 0.16;
+const ABSORB_STRENGTH = 0.34; // ink soaks into the fabric (grain + garment colour)
+const DESAT_STRENGTH = 0.30;  // faded / less saturated ink
+const FADE_CONTRAST = 0.20;   // lower print contrast (vintage)
+const FADE_LIFT = 0.10;       // lift the blacks toward grey
 
 // Composite one design box onto `target` the way a Photoshop smart-object +
 // displacement map does it:
@@ -155,7 +157,16 @@ export function compositeDesignBox(
       b += (lum - b) * desat;
     }
 
-    // 3) absorb into the fabric — brings in the garment colour + cotton grain
+    // 3) fade: lower contrast + lift the blacks so the print reads vintage
+    const fadeC = FADE_CONTRAST * realism;
+    const fadeL = FADE_LIFT * realism;
+    if (fadeC > 0 || fadeL > 0) {
+      r = r * (1 - fadeC) + fadeL;
+      g = g * (1 - fadeC) + fadeL;
+      b = b * (1 - fadeC) + fadeL;
+    }
+
+    // 4) absorb into the fabric — brings in the garment colour + cotton grain
     if (absorb > 0) {
       r = r * (1 - absorb) + (F[i] / 255) * absorb;
       g = g * (1 - absorb) + (F[i + 1] / 255) * absorb;
