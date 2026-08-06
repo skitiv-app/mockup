@@ -23,14 +23,6 @@ export function loadImageCached(src: string): Promise<HTMLImageElement> {
 
 const clamp8 = (v: number) => (v < 0 ? 0 : v > 255 ? 255 : v);
 
-// How much the print soaks into the fabric (grain + garment colour show
-// through) and how faded/desaturated it reads. Both scale with realism.
-// Tune these to taste — higher = more vintage/garment-dye.
-const ABSORB_STRENGTH = 0.34; // ink soaks into the fabric (grain + garment colour)
-const DESAT_STRENGTH = 0.30;  // faded / less saturated ink
-const FADE_CONTRAST = 0.20;   // lower print contrast (vintage)
-const FADE_LIFT = 0.10;       // lift the blacks toward grey
-
 // Composite one design box onto `target` the way a Photoshop smart-object +
 // displacement map does it:
 //   • displacement — the artwork is *warped* so it flows along the garment's
@@ -93,22 +85,6 @@ export function compositeDesignBox(
   const Lf = sampleGray(min * 0.012);
   const Lb = sampleGray(min * 0.05);
 
-  // A COLOUR sample of the fabric under the box (no grayscale) — its garment
-  // colour plus the cotton grain. Blending the ink a little toward this is what
-  // makes a garment-dye print look absorbed into the shirt instead of a sticker.
-  const fc = document.createElement("canvas");
-  fc.width = bw;
-  fc.height = bh;
-  const fg = fc.getContext("2d", { willReadFrequently: true })!;
-  fg.save();
-  fg.translate(bw / 2, bh / 2);
-  fg.rotate(-rad);
-  fg.translate(-cx, -cy);
-  fg.drawImage(mockup, 0, 0, Tw, Th);
-  fg.restore();
-  const F = fg.getImageData(0, 0, bw, bh).data;
-  fc.width = fc.height = 0;
-
   const out = dctx.createImageData(bw, bh);
   const O = out.data;
   // Light garments: creases cast real shadows on the print (shadow-led).
@@ -118,13 +94,9 @@ export function compositeDesignBox(
   const kShadow = realism * (garment === "dark" ? 1.0 : 2.2);
   const kHi = realism * (garment === "dark" ? 1.9 : 1.0);
 
-  // Garment-dye "vintage print" look, scaled by realism:
-  //  • ABSORB — blend the ink toward the actual fabric (grain + garment colour)
-  //    so the print soaks in and the cotton texture shows through.
-  //  • DESAT  — screen-print on garment-dyed cotton reads slightly desaturated.
-  const absorb = ABSORB_STRENGTH * realism;
-  const desat = DESAT_STRENGTH * realism;
-
+  // No pixel warping — the artwork is read 1:1 so it stays exactly as crisp as
+  // the source. Only per-pixel brightness changes (shadow/highlight from the
+  // fabric relief), which can't soften edges. This matches the PSD's clean look.
   for (let i = 0; i < D.length; i += 4) {
     const a = D[i + 3];
     if (a === 0) {
@@ -139,43 +111,12 @@ export function compositeDesignBox(
     let lighten = ridge * kHi;
     if (lighten > 0.5) lighten = 0.5;
 
-    // 1) wrinkle shadow + thread highlight (unchanged)
-    const sh = (x: number) => {
-      let v = x - darken;
+    for (let c = 0; c < 3; c++) {
+      let v = D[i + c] / 255 - darken; // Linear Burn (crease shadow)
       if (v < 0) v = 0;
-      return v + (1 - v) * lighten;
-    };
-    let r = sh(D[i] / 255);
-    let g = sh(D[i + 1] / 255);
-    let b = sh(D[i + 2] / 255);
-
-    // 2) desaturate the ink a touch toward its own luminance
-    if (desat > 0) {
-      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-      r += (lum - r) * desat;
-      g += (lum - g) * desat;
-      b += (lum - b) * desat;
+      v = v + (1 - v) * lighten; // Screen (thread highlight)
+      O[i + c] = clamp8(v * 255);
     }
-
-    // 3) fade: lower contrast + lift the blacks so the print reads vintage
-    const fadeC = FADE_CONTRAST * realism;
-    const fadeL = FADE_LIFT * realism;
-    if (fadeC > 0 || fadeL > 0) {
-      r = r * (1 - fadeC) + fadeL;
-      g = g * (1 - fadeC) + fadeL;
-      b = b * (1 - fadeC) + fadeL;
-    }
-
-    // 4) absorb into the fabric — brings in the garment colour + cotton grain
-    if (absorb > 0) {
-      r = r * (1 - absorb) + (F[i] / 255) * absorb;
-      g = g * (1 - absorb) + (F[i + 1] / 255) * absorb;
-      b = b * (1 - absorb) + (F[i + 2] / 255) * absorb;
-    }
-
-    O[i] = clamp8(r * 255);
-    O[i + 1] = clamp8(g * 255);
-    O[i + 2] = clamp8(b * 255);
     O[i + 3] = a;
   }
   dctx.putImageData(out, 0, 0);
