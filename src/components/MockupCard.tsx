@@ -377,7 +377,7 @@ export default function MockupCard({
 
         {design && scale > 0 && (
           <DesignCanvas
-            mockupSrc={mockup.src}
+            mockupSrc={mockup.thumbSrc || mockup.src}
             design={design}
             frame={frame}
             boxes={boxes}
