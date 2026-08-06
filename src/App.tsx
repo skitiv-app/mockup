@@ -107,9 +107,8 @@ export default function App() {
     if (m?.locked) return shape;
     return cardShape[id] ?? shape;
   };
-  // Members can't change realism — they always render at full 100%. Computed
-  // here so it can't be clobbered by the async settings load.
-  const effRealism = isOwner ? realism : 1;
+  // Everyone (owners and members) controls realism.
+  const effRealism = realism;
 
   const frameFor = (sh: ShapeKey): DesignFrame =>
     designFrames[sh] ?? DEFAULT_DESIGN_FRAME;
@@ -911,7 +910,6 @@ export default function App() {
               max={1}
               step={0.05}
               value={effRealism}
-              disabled={!isOwner}
               onChange={(e) => setRealism(Number(e.target.value))}
             />
           </label>
