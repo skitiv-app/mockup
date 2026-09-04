@@ -37,6 +37,7 @@ function DesignCanvas({
   const pixelH = Math.max(1, Math.round(height * dpr));
   useEffect(() => {
     let cancelled = false;
+    let raf = 0;
     const cv = ref.current;
     if (!cv) return;
     Promise.all([
@@ -44,6 +45,9 @@ function DesignCanvas({
       loadImageCached(design.src),
       design2 ? loadImageCached(design2.src) : Promise.resolve(null),
     ]).then(([mk, art, artBack]) => {
+        if (cancelled || !ref.current) return;
+        // Coalesce rapid updates (drag/zoom) into one redraw per frame.
+        raf = requestAnimationFrame(() => {
         if (cancelled || !ref.current) return;
         const ctx = ref.current.getContext("2d")!;
         ctx.clearRect(0, 0, pixelW, pixelH);
@@ -69,10 +73,12 @@ function DesignCanvas({
             isBack ? backFrame : frame
           );
         });
+        });
       }
     );
     return () => {
       cancelled = true;
+      if (raf) cancelAnimationFrame(raf);
     };
     // boxKey captures box geometry changes (drag/resize/rotate).
     // eslint-disable-next-line react-hooks/exhaustive-deps
