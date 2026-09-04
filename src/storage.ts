@@ -8,11 +8,14 @@ const LEGACY_LS_KEY = "mockup-studio-v2";
 
 export interface PersistedSettings {
   shape: ShapeKey;
+  backShape: ShapeKey;
   realism: number; // 0..1
   groupName: string; // base name for exported files
   format: "jpeg" | "png"; // export image format
   quality: "low" | "medium" | "high"; // export quality/size
   designFrames: Record<ShapeKey, DesignFrame>; // per-format pan/zoom of the design
+  backDesignFrames: Record<ShapeKey, DesignFrame>; // independent back pan/zoom
+  twoSided: boolean;
 }
 
 export interface PersistedState {
@@ -20,11 +23,13 @@ export interface PersistedState {
   presets: Record<ShapeKey, ShapePreset>;
   // The last uploaded design, so it's still there next time you open the app.
   design: DesignAsset | null;
+  design2: DesignAsset | null;
   settings: PersistedSettings;
 }
 
 const DEFAULT_SETTINGS: PersistedSettings = {
   shape: "short",
+  backShape: "short",
   realism: 1,
   groupName: "group",
   format: "jpeg",
@@ -34,6 +39,12 @@ const DEFAULT_SETTINGS: PersistedSettings = {
     square: { x: 0, y: 0, zoom: 1 },
     long: { x: 0, y: 0, zoom: 1 },
   },
+  backDesignFrames: {
+    short: { x: 0, y: 0, zoom: 1 },
+    square: { x: 0, y: 0, zoom: 1 },
+    long: { x: 0, y: 0, zoom: 1 },
+  },
+  twoSided: false,
 };
 
 // Older versions stored a single Box per shape instead of an array. Wrap any
@@ -64,6 +75,7 @@ function normalize(v: Partial<PersistedState> | undefined): PersistedState {
     mockups: migrateMockups(v?.mockups ?? []),
     presets: v?.presets ?? DEFAULT_PRESETS,
     design: v?.design ?? null,
+    design2: v?.design2 ?? null,
     settings: {
       ...DEFAULT_SETTINGS,
       ...(v?.settings ?? {}),
@@ -71,6 +83,11 @@ function normalize(v: Partial<PersistedState> | undefined): PersistedState {
         ...DEFAULT_SETTINGS.designFrames,
         ...((v?.settings as any)?.designFrames ?? {}),
       },
+      backDesignFrames: {
+        ...DEFAULT_SETTINGS.backDesignFrames,
+        ...((v?.settings as any)?.backDesignFrames ?? {}),
+      },
+      twoSided: Boolean((v?.settings as any)?.twoSided && v?.design2),
     },
   };
 }

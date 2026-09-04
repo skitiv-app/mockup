@@ -58,7 +58,9 @@ export interface RenderOptions {
   mime?: string; // "image/jpeg" | "image/png"
   quality?: number; // 0..1 for jpeg
   outScale?: number; // 0..1 — downscale the final image (lower quality/size)
-  frame?: DesignFrame; // how the design sits inside each placement box
+  frame?: DesignFrame; // how the front design sits inside each placement box
+  backDesign?: DesignAsset; // two-sided: 2nd/4th... boxes use this (the back)
+  backFrame?: DesignFrame; // independent positioning for the back design
 }
 
 // Render a single mockup with the design composited into the given box (with
@@ -74,9 +76,10 @@ export async function renderMockup(
   canvas.height = mockup.height;
   const ctx = canvas.getContext("2d")!;
 
-  const [bg, art] = await Promise.all([
+  const [bg, art, artBack] = await Promise.all([
     loadImage(mockup.src),
     loadImage(design.src),
+    opts.backDesign ? loadImage(opts.backDesign.src) : Promise.resolve(null),
   ]);
 
   const mime = opts.mime ?? "image/png";
@@ -91,9 +94,14 @@ export async function renderMockup(
   // folds) + shading — the technique real mockup generators use.
   const realism = Math.min(1, Math.max(0, opts.realism ?? 0.6));
   const garment = opts.garment ?? "light";
-  for (const box of boxes) {
-    compositeDesignBox(ctx, bg, mockup.width, mockup.height, art, box, realism, garment, opts.frame);
-  }
+  // Two-sided: even boxes (0,2,…) use the front design, odd boxes (1,3,…) use
+  // the back. Single-sided just uses the front for every box.
+  boxes.forEach((box, i) => {
+    const isBack = Boolean(artBack && i % 2 === 1);
+    const a = isBack ? artBack! : art;
+    const frame = isBack ? opts.backFrame ?? opts.frame : opts.frame;
+    compositeDesignBox(ctx, bg, mockup.width, mockup.height, a, box, realism, garment, frame);
+  });
 
   // Optionally downscale the finished image for a smaller file (quality knob).
   let out: HTMLCanvasElement = canvas;

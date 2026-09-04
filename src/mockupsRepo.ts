@@ -73,6 +73,7 @@ interface Row {
   categories: string[] | null;
   placements: Partial<Record<ShapeKey, Box[]>>;
   locked: boolean;
+  two_sided: boolean | null;
 }
 
 const THUMB_MAX = 900; // longest edge, px
@@ -175,6 +176,7 @@ export async function loadMockupsFromDb(
         : []) as string[],
       placements: r.placements ?? {},
       locked: r.locked,
+      twoSided: !!r.two_sided,
       imagePath: r.image_path,
     });
   }
@@ -242,6 +244,7 @@ export async function saveMockupToDb(
     categories: mockup.categories ?? [],
     placements: mockup.placements ?? {},
     locked: mockup.locked ?? true,
+    two_sided: mockup.twoSided ?? false,
     updated_at: new Date().toISOString(),
   });
   if (error) throw error;
@@ -276,6 +279,18 @@ export async function deleteMockupFromDb(
 }
 
 // Update just a mockup's categories (owner organizing a saved mockup).
+export async function updateMockupTwoSided(
+  supabase: SupabaseClient,
+  id: string,
+  twoSided: boolean
+): Promise<void> {
+  const { error } = await supabase
+    .from("mockups")
+    .update({ two_sided: twoSided, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export async function updateMockupCategories(
   supabase: SupabaseClient,
   id: string,

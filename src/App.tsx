@@ -20,6 +20,7 @@ import {
 } from "./render";
 import { detectShirtBoxes } from "./autoplace";
 import MockupCard from "./components/MockupCard";
+import DesignStudio from "./components/DesignStudio";
 import JSZip from "jszip";
 import { useAuth0 } from "@auth0/auth0-react";
 import { useSupabase } from "./auth/SupabaseProvider";
@@ -30,13 +31,14 @@ import {
   saveMockupToDb,
   deleteMockupFromDb,
   updateMockupCategories,
+  updateMockupTwoSided,
   loadCategoryList,
   saveCategoryList,
   backfillThumbnails,
 } from "./mockupsRepo";
 
 const uid = () => Math.random().toString(36).slice(2, 9);
-const UNCAT = "Uncategorized";
+const NORMAL_CATEGORY = "Normal";
 
 // Export quality presets: output scale + JPEG compression.
 const QUALITY: Record<"low" | "medium" | "high", { scale: number; jpeg: number }> = {
@@ -64,9 +66,19 @@ export default function App() {
   const [presets, setPresets] =
     useState<Record<ShapeKey, ShapePreset>>(DEFAULT_PRESETS);
   const [shape, setShape] = useState<ShapeKey>("short");
+  const [backShape, setBackShape] = useState<ShapeKey>("short");
   const [design, setDesign] = useState<DesignAsset | null>(null);
+  // Two-sided: a back design (2.png) placed in the 2nd frame of each mockup.
+  const [twoSided, setTwoSided] = useState(false);
+  const [design2, setDesign2] = useState<DesignAsset | null>(null);
+  const [designWarning, setDesignWarning] = useState<string | null>(null);
+  // Design studio popup (opens after a design is uploaded/chosen).
+  const [showStudio, setShowStudio] = useState(false);
+  // Folder the design was picked from — exports save straight back to it.
+  const [exportDir, setExportDir] = useState<any | null>(null);
+  const [exportDirName, setExportDirName] = useState<string | null>(null);
+  const [designChoices, setDesignChoices] = useState<any[] | null>(null);
   const [realism, setRealism] = useState(1);
-  const [toneFilter, setToneFilter] = useState<"all" | "light" | "dark">("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [categoryList, setCategoryList] = useState<string[]>(["Comfort Colors", "Gildan"]);
   const [newCat, setNewCat] = useState("");
@@ -75,6 +87,11 @@ export default function App() {
   const [quality, setQuality] = useState<"low" | "medium" | "high">("high");
   // How the design sits inside the frame, remembered per format.
   const [designFrames, setDesignFrames] = useState<Record<ShapeKey, DesignFrame>>({
+    short: { ...DEFAULT_DESIGN_FRAME },
+    square: { ...DEFAULT_DESIGN_FRAME },
+    long: { ...DEFAULT_DESIGN_FRAME },
+  });
+  const [backDesignFrames, setBackDesignFrames] = useState<Record<ShapeKey, DesignFrame>>({
     short: { ...DEFAULT_DESIGN_FRAME },
     square: { ...DEFAULT_DESIGN_FRAME },
     long: { ...DEFAULT_DESIGN_FRAME },
@@ -118,6 +135,14 @@ export default function App() {
       [sh]: { ...(prev[sh] ?? DEFAULT_DESIGN_FRAME), ...patch },
     }));
   }
+  const backFrameFor = (sh: ShapeKey): DesignFrame =>
+    backDesignFrames[sh] ?? DEFAULT_DESIGN_FRAME;
+  function updateBackFrame(sh: ShapeKey, patch: Partial<DesignFrame>) {
+    setBackDesignFrames((prev) => ({
+      ...prev,
+      [sh]: { ...(prev[sh] ?? DEFAULT_DESIGN_FRAME), ...patch },
+    }));
+  }
   function setShapeForCard(id: string, s: ShapeKey) {
     setCardShape((prev) => ({ ...prev, [id]: s }));
   }
@@ -145,12 +170,16 @@ export default function App() {
       }
       setPresets(s.presets);
       setDesign(s.design);
+      setDesign2(s.design2);
+      setTwoSided(s.settings.twoSided);
       setShape(s.settings.shape);
+      setBackShape(s.settings.backShape);
       setRealism(s.settings.realism);
       setGroupName(s.settings.groupName);
       setFormat(s.settings.format);
       setQuality(s.settings.quality);
       setDesignFrames(s.settings.designFrames);
+      setBackDesignFrames(s.settings.backDesignFrames);
       loaded.current = true;
     });
     return () => {
@@ -193,8 +222,8 @@ export default function App() {
   }, [cloud?.supabase, cloud?.orgId]);
 
   // Keep the latest state in a ref so we can flush it synchronously on close.
-  const latest = useRef({ mockups, presets, design, shape, realism, groupName, format, quality, designFrames, cloudActive: false });
-  latest.current = { mockups, presets, design, shape, realism, groupName, format, quality, designFrames, cloudActive: !!cloud };
+  const latest = useRef({ mockups, presets, design, design2, twoSided, shape, backShape, realism, groupName, format, quality, designFrames, backDesignFrames, cloudActive: false });
+  latest.current = { mockups, presets, design, design2, twoSided, shape, backShape, realism, groupName, format, quality, designFrames, backDesignFrames, cloudActive: !!cloud };
   const flush = () => {
     if (!loaded.current) return;
     const l = latest.current;
@@ -204,13 +233,17 @@ export default function App() {
       mockups: l.cloudActive ? [] : l.mockups,
       presets: l.presets,
       design: l.design,
+      design2: l.design2,
       settings: {
         shape: l.shape,
+        backShape: l.backShape,
         realism: l.realism,
         groupName: l.groupName,
         format: l.format,
         quality: l.quality,
         designFrames: l.designFrames,
+        backDesignFrames: l.backDesignFrames,
+        twoSided: l.twoSided,
       },
     });
   };
@@ -222,7 +255,7 @@ export default function App() {
     window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(flush, 500);
     return () => window.clearTimeout(saveTimer.current);
-  }, [mockups, presets, design, shape, realism, groupName, format, quality, designFrames]);
+  }, [mockups, presets, design, design2, twoSided, shape, backShape, realism, groupName, format, quality, designFrames, backDesignFrames]);
 
   // Also flush immediately when the tab is hidden or closing, so nothing is
   // lost if you quit within the debounce window.
@@ -250,7 +283,7 @@ export default function App() {
         width,
         height,
         categories:
-          categoryFilter !== "all" && categoryFilter !== UNCAT
+          categoryFilter !== "all" && categoryFilter !== NORMAL_CATEGORY
             ? [categoryFilter]
             : [],
         placements: {},
@@ -270,10 +303,177 @@ export default function App() {
     const src = await readFileAsDataURL(file);
     const { width, height } = await getImageSize(src);
     setDesign({ src, width, height, name: file.name.replace(/\.[^.]+$/, "") });
+    setSelected(new Set());
+    setTwoSided(false);
+    setDesignWarning(null);
+    // A plain file upload gives no folder, so drop any remembered one rather
+    // than exporting to the wrong place silently.
+    if (exportDir) {
+      setExportDir(null);
+      setExportDirName(null);
+    }
+    setDesign2(null); // no folder → can't load a back design
     // Auto-pick the shape whose aspect ratio matches this design.
     const picked = pickShapeForRatio(width, height, presets);
     setShape(picked);
     setAutoShapeNote(picked);
+    setShowStudio(true); // pop the studio to fit the design to the frame
+  }
+
+  // ---- Feature 1: pick the design FROM its folder, export back to it ----
+  async function ensureDirAccess(handle: any): Promise<boolean> {
+    try {
+      if ((await handle.queryPermission?.({ mode: "readwrite" })) === "granted")
+        return true;
+      return (
+        (await handle.requestPermission?.({ mode: "readwrite" })) === "granted"
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  async function useDesignFile(handle: any, dirName?: string) {
+    try {
+      const file = await handle.getFile();
+      const src = await readFileAsDataURL(file);
+      const { width, height } = await getImageSize(src);
+      setDesign({ src, width, height, name: file.name.replace(/\.[^.]+$/, "") });
+      setSelected(new Set());
+      const picked = pickShapeForRatio(width, height, presets);
+      setShape(picked);
+      setAutoShapeNote(picked);
+      setDesignChoices(null);
+      setShowStudio(true);
+      flash(`Design set — exports will save to "${dirName ?? exportDirName ?? "that folder"}" ✓`);
+    } catch (e: any) {
+      flash("Couldn't read that image: " + (e?.message ?? e));
+    }
+  }
+
+  async function readHandleAsDesign(handle: any): Promise<DesignAsset | null> {
+    try {
+      const file = await handle.getFile();
+      const src = await readFileAsDataURL(file);
+      const { width, height } = await getImageSize(src);
+      return { src, width, height, name: file.name.replace(/\.[^.]+$/, "") };
+    } catch {
+      return null;
+    }
+  }
+
+  // Choose the design by its folder (the only way to know where to write
+  // exports back to — browsers don't expose a file's parent directory).
+  async function pickDesignFolder(mode: "single" | "double") {
+    const picker = (window as any).showDirectoryPicker;
+    if (!picker) {
+      const msg = "This browser can't pick folders — use Chrome or Edge.";
+      setDesignWarning(msg);
+      flash(msg);
+      return;
+    }
+    let dir: any;
+    try {
+      dir = await picker({ mode: "readwrite" });
+    } catch (e: any) {
+      if (e?.name !== "AbortError") flash("Couldn't open the folder.");
+      return;
+    }
+    const images: any[] = [];
+    try {
+      for await (const [name, handle] of dir.entries()) {
+        if (handle.kind !== "file") continue;
+        if (!/\.(png|jpe?g|webp|gif|avif)$/i.test(name)) continue;
+        images.push(handle);
+      }
+    } catch {
+      flash("Couldn't read the folder.");
+      return;
+    }
+    setExportDir(dir);
+    setExportDirName(dir.name ?? null);
+
+    if (mode === "double") {
+      const frontHandle = images.find((h) => /^1\.png$/i.test(h.name));
+      const backHandle = images.find((h) => /^2\.png$/i.test(h.name));
+
+      if (!frontHandle) {
+        const msg = 'Two-sided folders need a front file named "1.png".';
+        setTwoSided(false);
+        setDesign2(null);
+        setDesignWarning(msg);
+        flash(msg);
+        return;
+      }
+
+      const front = await readHandleAsDesign(frontHandle);
+      if (!front) {
+        const msg = 'Couldn\'t read "1.png". Please check the image and try again.';
+        setTwoSided(false);
+        setDesign2(null);
+        setDesignWarning(msg);
+        flash(msg);
+        return;
+      }
+
+      setDesign(front);
+      setSelected(new Set());
+      const picked = pickShapeForRatio(front.width, front.height, presets);
+      setShape(picked);
+      setAutoShapeNote(picked);
+
+      if (!backHandle) {
+        const msg = 'Front loaded, but this folder has no "2.png". Add it and choose the two-sided folder again.';
+        setTwoSided(false);
+        setDesign2(null);
+        setDesignWarning(msg);
+        setShowStudio(true);
+        flash('Warning: "2.png" is missing.');
+        return;
+      }
+
+      const back = await readHandleAsDesign(backHandle);
+      if (!back) {
+        const msg = 'Couldn\'t read "2.png". Please check the image and try again.';
+        setTwoSided(false);
+        setDesign2(null);
+        setDesignWarning(msg);
+        setShowStudio(true);
+        flash(msg);
+        return;
+      }
+
+      setDesign2(back);
+      setTwoSided(true);
+      setBackShape(pickShapeForRatio(back.width, back.height, presets));
+      setDesignWarning(null);
+      setDesignChoices(null);
+      setShowStudio(true);
+      flash(`Front and back loaded from "${dir.name}" ✓`);
+      return;
+    }
+
+    setTwoSided(false);
+    setDesign2(null);
+    setDesignWarning(null);
+    if (!images.length) {
+      flash(`No images in "${dir.name}" — exports will go here; pick a design separately.`);
+      return;
+    }
+    // Prefer the image named "1" (e.g. 1.png) — that's the design.
+    const primary = images.find((h) =>
+      /^1\.(png|jpe?g|webp|gif|avif)$/i.test(h.name)
+    );
+    if (primary) {
+      await useDesignFile(primary, dir.name);
+      return;
+    }
+    // No "1.*" — fall back: one image auto, otherwise let the user choose.
+    if (images.length === 1) {
+      await useDesignFile(images[0], dir.name);
+      return;
+    }
+    setDesignChoices(images);
   }
 
   function toggleSelect(id: string) {
@@ -284,7 +484,7 @@ export default function App() {
     });
   }
 
-  // Select/deselect a specific group of mockups (used per Light/Dark section).
+  // Select/deselect a specific category of mockups.
   function setGroupSelected(ids: string[], on: boolean) {
     setSelected((s) => {
       const next = new Set(s);
@@ -298,8 +498,16 @@ export default function App() {
   function boxesFor(mockup: Mockup): Box[] {
     const sh = shapeFor(mockup.id);
     const saved = mockup.placements[sh];
-    if (saved && saved.length) return saved;
-    return [defaultBox(mockup, presets[sh])];
+    let boxes = saved && saved.length ? saved : [defaultBox(mockup, presets[sh])];
+    // Two-sided needs a 2nd frame (the back). Pad with an offset default so the
+    // back design has somewhere to go until the user positions it.
+    if (mockup.twoSided && boxes.length < 2) {
+      const base = boxes[boxes.length - 1];
+      const nx = Math.min(base.x + base.w * 0.5, mockup.width - base.w);
+      const ny = base.y;
+      boxes = [...boxes, { ...base, x: Math.max(0, nx), y: Math.max(0, ny) }];
+    }
+    return boxes;
   }
 
   function updateBoxes(id: string, boxes: Box[]) {
@@ -502,11 +710,6 @@ export default function App() {
     }
   }
 
-  function setTone(id: string, tone: "light" | "dark") {
-    if (!isOwner) return;
-    setMockups((list) => list.map((m) => (m.id === id ? { ...m, tone } : m)));
-  }
-
   // ---- Categories (owner-defined, mockups can be in several) ----
   function persistCategoryList(list: string[]) {
     setCategoryList(list);
@@ -515,7 +718,11 @@ export default function App() {
   }
   function addCategory(name: string) {
     const n = name.trim();
-    if (!n || n === UNCAT || categoryList.includes(n)) return;
+    if (
+      !n ||
+      n.toLocaleLowerCase() === NORMAL_CATEGORY.toLocaleLowerCase() ||
+      categoryList.some((category) => category.toLocaleLowerCase() === n.toLocaleLowerCase())
+    ) return;
     persistCategoryList([...categoryList, n]);
     setNewCat("");
   }
@@ -534,6 +741,16 @@ export default function App() {
     );
     if (categoryFilter === name) setCategoryFilter("all");
   }
+  function toggleMockupTwoSided(id: string) {
+    if (!isOwner) return;
+    const m = mockups.find((x) => x.id === id);
+    if (!m) return;
+    const val = !m.twoSided;
+    setMockups((list) => list.map((x) => (x.id === id ? { ...x, twoSided: val } : x)));
+    if (cloud && m.imagePath)
+      updateMockupTwoSided(cloud.supabase, id, val).catch(() => {});
+  }
+
   function toggleMockupCategory(id: string, cat: string) {
     if (!isOwner) return;
     const m = mockups.find((x) => x.id === id);
@@ -568,6 +785,8 @@ export default function App() {
         garment: m.tone ?? "light",
         mime: "image/png",
         frame: frameFor(shapeFor(m.id)),
+        backDesign: m.twoSided ? design2 ?? undefined : undefined,
+        backFrame: backFrameFor(backShape),
       });
       await navigator.clipboard.write([
         new ClipboardItem({ "image/png": blob }),
@@ -588,13 +807,18 @@ export default function App() {
     const targets = mockups.filter((m) => selected.has(m.id));
     if (targets.length === 0) return;
 
-    // Preferred path: user picks ONE folder, we write every PNG into it.
-    // (Chrome/Edge — File System Access API.)
+    // Preferred path: write every image into ONE folder (Chrome/Edge).
+    // If the design was picked from a folder, reuse it automatically — no prompt.
     const picker = (window as any).showDirectoryPicker;
     let dir: any = null;
-    if (picker) {
+    if (exportDir && (await ensureDirAccess(exportDir))) {
+      dir = exportDir;
+    } else if (picker) {
       try {
         dir = await picker({ mode: "readwrite" });
+        // Remember this folder for next time.
+        setExportDir(dir);
+        setExportDirName(dir.name ?? null);
       } catch {
         return; // user cancelled the folder chooser
       }
@@ -621,6 +845,8 @@ export default function App() {
           quality: q.jpeg,
           outScale: q.scale,
           frame: frameFor(shapeFor(m.id)),
+          backDesign: m.twoSided ? design2 ?? undefined : undefined,
+          backFrame: backFrameFor(backShape),
         });
 
       if (dir) {
@@ -684,7 +910,7 @@ export default function App() {
   // of them change so a stale number isn't shown.
   useEffect(() => {
     setEstimateMB(null);
-  }, [selected, mockups, format, quality, realism, design]);
+  }, [selected, mockups, format, quality, realism, design, design2, designFrames, backDesignFrames, shape, backShape]);
 
   // Render the selected mockups and total up their byte size (accurate — it
   // renders exactly what export would produce).
@@ -705,6 +931,8 @@ export default function App() {
           quality: q.jpeg,
           outScale: q.scale,
           frame: frameFor(shapeFor(m.id)),
+          backDesign: m.twoSided ? design2 ?? undefined : undefined,
+          backFrame: backFrameFor(backShape),
         });
         total += blob.size;
         await delay(0);
@@ -769,19 +997,55 @@ export default function App() {
 
         <section className="panel">
           <h2>2 · Your design</h2>
-          <label className="file-btn">
-            {design ? "Change design" : "Upload design (PNG)"}
-            <input
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={(e) => onSetDesign(e.target.files)}
-            />
-          </label>
+          <div className="design-upload-actions">
+            {hasFolderApi ? (
+              <button className="file-btn" onClick={() => pickDesignFolder("single")}>
+                1 sided folder
+              </button>
+            ) : (
+            <label className="file-btn">
+              1 sided folder
+              <input
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={(e) => onSetDesign(e.target.files)}
+              />
+            </label>
+            )}
+            <button
+              className="file-btn two-sided-btn"
+              onClick={() => pickDesignFolder("double")}
+            >
+              2 sided folder
+            </button>
+          </div>
+          <p className="hint">
+            Two-sided folders must contain <b>1.png</b> for the front and{" "}
+            <b>2.png</b> for the back.
+          </p>
+          {designWarning && (
+            <p className="design-warning" role="alert">⚠ {designWarning}</p>
+          )}
+          {exportDirName && (
+            <p className="hint">📁 Exports save to <b>{exportDirName}</b></p>
+          )}
+          {twoSided && (
+            <p className="hint">
+              {design2
+                ? "✓ Back design (2.png) loaded — tag mockups with ⇋ for a back frame"
+                : "Waiting for a folder with 2.png for the back design."}
+            </p>
+          )}
+          {design && (
+            <button className="mini" onClick={() => setShowStudio(true)}>
+              🎬 Open {twoSided && design2 ? "front & back studios" : "studio"}
+            </button>
+          )}
           {design && (
             <>
               <label className="field-label">
-                Framing — {shape} frame (drag to position)
+                Framing — {twoSided ? "front · " : ""}{shape} frame (drag to position)
               </label>
               <div
                 className="frame-box"
@@ -882,12 +1146,19 @@ export default function App() {
               </p>
             <div className="design-preview">
               <img src={design.src} />
-              <span>{design.name}</span>
+              <span>
+                {twoSided && design2
+                  ? `Front: ${design.name} · Back: ${design2.name}`
+                  : design.name}
+              </span>
               <button
                 className="icon-btn design-remove"
                 title="Remove design"
                 onClick={() => {
                   setDesign(null);
+                  setDesign2(null);
+                  setTwoSided(false);
+                  setDesignWarning(null);
                   setAutoShapeNote(null);
                 }}
               >
@@ -1063,6 +1334,15 @@ export default function App() {
           >
             All
           </button>
+          <button
+            className={"cat-tab" + (categoryFilter === NORMAL_CATEGORY ? " on" : "")}
+            onClick={() => setCategoryFilter(NORMAL_CATEGORY)}
+          >
+            <span className="cat-tab-label">{NORMAL_CATEGORY}</span>
+            <span className="cat-tab-count">
+              {mockups.filter((m) => !(m.categories && m.categories.length)).length}
+            </span>
+          </button>
           {categoryList.map((c) => {
             const count = mockups.filter((m) => (m.categories ?? []).includes(c)).length;
             return (
@@ -1085,15 +1365,6 @@ export default function App() {
               </button>
             );
           })}
-          <button
-            className={"cat-tab" + (categoryFilter === UNCAT ? " on" : "")}
-            onClick={() => setCategoryFilter(UNCAT)}
-          >
-            <span className="cat-tab-label">{UNCAT}</span>
-            <span className="cat-tab-count">
-              {mockups.filter((m) => !(m.categories && m.categories.length)).length}
-            </span>
-          </button>
           {isOwner && (
             <span className="cat-tab-add">
               <input
@@ -1107,17 +1378,6 @@ export default function App() {
               )}
             </span>
           )}
-          <span className="tone-tabs">
-            {(["all", "light", "dark"] as const).map((t) => (
-              <button
-                key={t}
-                className={"cat-tab tone-tab" + (toneFilter === t ? " on" : "")}
-                onClick={() => setToneFilter(t)}
-              >
-                {t === "all" ? "All colors" : t === "light" ? "☀ Light" : "🌙 Dark"}
-              </button>
-            ))}
-          </span>
         </div>
 
         {mockups.length === 0 ? (
@@ -1132,10 +1392,10 @@ export default function App() {
         ) : (
           (() => {
             const inCat = (cat: string, m: Mockup) =>
-              cat === UNCAT
+              cat === NORMAL_CATEGORY
                 ? !(m.categories && m.categories.length)
                 : (m.categories ?? []).includes(cat);
-            const cats = [...categoryList, UNCAT].filter(
+            const cats = [NORMAL_CATEGORY, ...categoryList].filter(
               (cat) => categoryFilter === "all" || categoryFilter === cat
             );
             return cats
@@ -1153,87 +1413,64 @@ export default function App() {
                         <span className="chip">{catMockups.length}</span>
                       </h2>
                     )}
-                    {(["light", "dark"] as const)
-                      .filter(
-                        (tone) =>
-                          (toneFilter === "all" || toneFilter === tone) &&
-                          catMockups.some((m) => (m.tone ?? "light") === tone)
-                      )
-                      .map((tone) => {
-                        const group = catMockups.filter(
-                          (m) => (m.tone ?? "light") === tone
-                        );
-                        return (
-                          <section className="tone-group" key={tone}>
-                            <div className="tone-head">
-                              {toneFilter === "all" && (
-                                <>
-                                  <span className={"swatch " + tone} />
-                                  <h3>
-                                    {tone === "light" ? "Light color" : "Dark color"} mockups
-                                  </h3>
-                                  <span className="chip">{group.length}</span>
-                                </>
-                              )}
-                              {group.length > 0 && (
-                                <div className="tone-select">
-                                  <button
-                                    className="mini"
-                                    onClick={() =>
-                                      setGroupSelected(group.map((m) => m.id), true)
-                                    }
-                                  >
-                                    Select all
-                                  </button>
-                                  <button
-                                    className="mini"
-                                    onClick={() =>
-                                      setGroupSelected(group.map((m) => m.id), false)
-                                    }
-                                  >
-                                    None
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                            {(
-                              <div className="grid">
-                                {group.map((m) => (
-                                  <MockupCard
-                                    key={m.id}
-                                    mockup={m}
-                                    shape={shapeFor(m.id)}
-                                    boxes={boxesFor(m)}
-                                    design={design}
-                                    frame={frameFor(shapeFor(m.id))}
-                                    realism={effRealism}
-                                    garment={m.tone ?? "light"}
-                                    selected={selected.has(m.id)}
-                                    hasMany={mockups.length > 1}
-                                    autoBusy={autoBusy}
-                                    allCategories={categoryList}
-                                    onChangeBoxes={(boxes) => updateBoxes(m.id, boxes)}
-                                    onAddBox={() => addBox(m.id)}
-                                    onRemoveBox={(i) => removeBox(m.id, i)}
-                                    onApplyToAll={() => applyLayoutToAll(m.id)}
-                                    onAutoPlace={() => autoPlaceCard(m.id)}
-                                    onSetTone={(t) => setTone(m.id, t)}
-                                    onToggleCategory={(c) => toggleMockupCategory(m.id, c)}
-                                    onCopy={() => copyMockup(m.id)}
-                                    onToggleSelect={() => toggleSelect(m.id)}
-                                    onPickShape={(s) => setShapeForCard(m.id, s)}
-                                    onToggleLock={() => toggleLock(m.id)}
-                                    onRemove={() => removeMockup(m.id)}
-                                    isOwner={isOwner}
-                                  />
-                                ))}
-                              </div>
-                            )}
-                          </section>
-                        );
-                      })}
-                    {catMockups.length === 0 && (
-                      <p className="muted tone-empty">
+                    {catMockups.length > 0 ? (
+                      <section className="category-group">
+                        <div className="category-select">
+                          <button
+                            className="mini"
+                            onClick={() =>
+                              setGroupSelected(catMockups.map((m) => m.id), true)
+                            }
+                          >
+                            Select all
+                          </button>
+                          <button
+                            className="mini"
+                            onClick={() =>
+                              setGroupSelected(catMockups.map((m) => m.id), false)
+                            }
+                          >
+                            None
+                          </button>
+                        </div>
+                        <div className="grid">
+                          {catMockups.map((m) => (
+                            <MockupCard
+                              key={m.id}
+                              mockup={m}
+                              shape={shapeFor(m.id)}
+                              boxes={boxesFor(m)}
+                              design={design}
+                              design2={m.twoSided ? design2 : null}
+                              frame={frameFor(shapeFor(m.id))}
+                              backFrame={backFrameFor(backShape)}
+                              realism={effRealism}
+                              garment={m.tone ?? "light"}
+                              selected={selected.has(m.id)}
+                              hasMany={mockups.length > 1}
+                              autoBusy={autoBusy}
+                              allCategories={categoryList}
+                              onChangeBoxes={(boxes) => updateBoxes(m.id, boxes)}
+                              onAddBox={() => addBox(m.id)}
+                              onRemoveBox={(i) => removeBox(m.id, i)}
+                              onApplyToAll={() => applyLayoutToAll(m.id)}
+                              onAutoPlace={() => autoPlaceCard(m.id)}
+                              onToggleCategory={(c) => toggleMockupCategory(m.id, c)}
+                              twoSidedFeature={twoSided}
+                              isTwoSided={!!m.twoSided}
+                              onToggleTwoSided={() => toggleMockupTwoSided(m.id)}
+                              onCopy={() => copyMockup(m.id)}
+                              onToggleSelect={() => toggleSelect(m.id)}
+                              onPickShape={(s) => setShapeForCard(m.id, s)}
+                              onToggleLock={() => toggleLock(m.id)}
+                              onRemove={() => removeMockup(m.id)}
+                              isOwner={isOwner}
+                            />
+                          ))}
+                        </div>
+                      </section>
+                    ) : (
+                      <p className="muted category-empty">
                         Nothing in this category yet — add mockups here or tag
                         existing ones with this category.
                       </p>
@@ -1244,6 +1481,48 @@ export default function App() {
           })()
         )}
       </main>
+
+      {showStudio && design && (
+        <DesignStudio
+          design={design}
+          backDesign={twoSided ? design2 : null}
+          frontShape={shape}
+          backShape={backShape}
+          onPickFrontShape={setAllShape}
+          onPickBackShape={setBackShape}
+          presets={presets}
+          frameFor={frameFor}
+          updateFrame={updateFrame}
+          backFrameFor={backFrameFor}
+          updateBackFrame={updateBackFrame}
+          onClose={() => setShowStudio(false)}
+        />
+      )}
+
+      {designChoices && (
+        <div className="modal-back" onClick={() => setDesignChoices(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>Pick your design</h2>
+              <button className="icon-btn" onClick={() => setDesignChoices(null)}>✕</button>
+            </div>
+            <p className="auth-muted">
+              {designChoices.length} images in that folder. Exports will save back to it.
+            </p>
+            <div className="choice-grid">
+              {designChoices.map((h, i) => (
+                <button
+                  key={i}
+                  className="choice-item"
+                  onClick={() => useDesignFile(h, exportDirName ?? undefined)}
+                >
+                  {h.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {toast && <div className="toast">{toast}</div>}
     </div>

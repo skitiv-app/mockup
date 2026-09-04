@@ -30,13 +30,15 @@ export interface Mockup {
   // Shirt brand — legacy single category (kept for migration).
   brand?: Brand;
   // Owner-defined categories this mockup belongs to. A mockup can be in several
-  // sections at once. Empty = "Uncategorized".
+  // sections at once. Empty = the default "Normal" category.
   categories?: string[];
   // Saved placement boxes per shape. A mockup can have several spots (e.g. a
   // photo showing two shirts), each getting its own copy of the design.
   placements: Partial<Record<ShapeKey, Box[]>>;
   // When locked, all placements are frozen and can't be dragged.
   locked?: boolean;
+  // Tagged as two-sided: gets a 2nd frame that prints the back design (2.png).
+  twoSided?: boolean;
   // Storage path in Supabase ("{org_id}/{id}.png") once the mockup is saved.
   // Present means the image is already uploaded (don't re-upload on lock).
   imagePath?: string;

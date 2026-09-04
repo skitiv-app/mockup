@@ -8,7 +8,9 @@ import { compositeDesignBox, loadImageCached, type Garment } from "../composite"
 function DesignCanvas({
   mockupSrc,
   design,
+  design2,
   frame,
+  backFrame,
   boxes,
   scale,
   width,
@@ -18,7 +20,9 @@ function DesignCanvas({
 }: {
   mockupSrc: string;
   design: DesignAsset;
+  design2?: DesignAsset | null;
   frame: DesignFrame;
+  backFrame: DesignFrame;
   boxes: Box[];
   scale: number;
   width: number;
@@ -35,12 +39,15 @@ function DesignCanvas({
     let cancelled = false;
     const cv = ref.current;
     if (!cv) return;
-    Promise.all([loadImageCached(mockupSrc), loadImageCached(design.src)]).then(
-      ([mk, art]) => {
+    Promise.all([
+      loadImageCached(mockupSrc),
+      loadImageCached(design.src),
+      design2 ? loadImageCached(design2.src) : Promise.resolve(null),
+    ]).then(([mk, art, artBack]) => {
         if (cancelled || !ref.current) return;
         const ctx = ref.current.getContext("2d")!;
         ctx.clearRect(0, 0, pixelW, pixelH);
-        for (const b of boxes) {
+        boxes.forEach((b, i) => {
           const tb: Box = {
             x: b.x * scale * dpr,
             y: b.y * scale * dpr,
@@ -48,8 +55,20 @@ function DesignCanvas({
             h: b.h * scale * dpr,
             rotation: b.rotation ?? 0,
           };
-          compositeDesignBox(ctx, mk, pixelW, pixelH, art, tb, realism, garment, frame);
-        }
+          const isBack = Boolean(artBack && i % 2 === 1);
+          const a = isBack ? artBack! : art;
+          compositeDesignBox(
+            ctx,
+            mk,
+            pixelW,
+            pixelH,
+            a,
+            tb,
+            realism,
+            garment,
+            isBack ? backFrame : frame
+          );
+        });
       }
     );
     return () => {
@@ -57,7 +76,7 @@ function DesignCanvas({
     };
     // boxKey captures box geometry changes (drag/resize/rotate).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mockupSrc, design.src, boxKey, scale, pixelW, pixelH, dpr, realism, garment, frame.x, frame.y, frame.zoom]);
+  }, [mockupSrc, design.src, design2?.src, boxKey, scale, pixelW, pixelH, dpr, realism, garment, frame.x, frame.y, frame.zoom, backFrame.x, backFrame.y, backFrame.zoom]);
 
   return (
     <canvas
@@ -80,7 +99,9 @@ interface Props {
   shape: ShapeKey;
   boxes: Box[]; // current placement boxes for the active shape
   design: DesignAsset | null;
+  design2?: DesignAsset | null;
   frame: DesignFrame;
+  backFrame: DesignFrame;
   realism: number; // 0..1 — how much the print sinks into the fabric
   garment: Garment; // light vs dark garment tone
   selected: boolean;
@@ -91,15 +112,17 @@ interface Props {
   onRemoveBox: (index: number) => void;
   onApplyToAll: () => void;
   onAutoPlace: () => void;
-  onSetTone: (tone: Garment) => void;
   allCategories: string[];
   onToggleCategory: (cat: string) => void;
+  twoSidedFeature?: boolean;
+  isTwoSided?: boolean;
+  onToggleTwoSided?: () => void;
   onCopy: () => void;
   onToggleSelect: () => void;
   onPickShape: (shape: ShapeKey) => void;
   onToggleLock: () => void;
   onRemove: () => void;
-  isOwner: boolean; // members are read-only: no add/remove/tone/brand/lock
+  isOwner: boolean; // members are read-only: no add/remove/category/lock
 }
 
 type DragMode = null | "move" | "resize" | "rotate";
@@ -109,7 +132,9 @@ export default function MockupCard({
   shape,
   boxes,
   design,
+  design2,
   frame,
+  backFrame,
   realism,
   garment,
   selected,
@@ -120,9 +145,11 @@ export default function MockupCard({
   onRemoveBox,
   onApplyToAll,
   onAutoPlace,
-  onSetTone,
   allCategories,
   onToggleCategory,
+  twoSidedFeature,
+  isTwoSided,
+  onToggleTwoSided,
   onCopy,
   onToggleSelect,
   onPickShape,
@@ -269,15 +296,17 @@ export default function MockupCard({
           </span>
         </div>
         <div className="head-actions">
-          {isOwner && (
+          {isOwner && twoSidedFeature && (
             <button
-              className="tone-btn"
-              onClick={() => onSetTone(garment === "light" ? "dark" : "light")}
-              title={`This mockup is ${garment} — click to move it to the ${
-                garment === "light" ? "Dark" : "Light"
-              } group`}
+              className={"tone-btn" + (isTwoSided ? " lock-on" : "")}
+              onClick={onToggleTwoSided}
+              title={
+                isTwoSided
+                  ? "Two-sided: prints the back (2.png) on the 2nd frame — click to make single-sided"
+                  : "Tag as two-sided: adds a 2nd frame that prints the back (2.png)"
+              }
             >
-              {garment === "light" ? "☀" : "🌙"}
+              ⇋
             </button>
           )}
           <button
@@ -379,7 +408,9 @@ export default function MockupCard({
           <DesignCanvas
             mockupSrc={mockup.thumbSrc || mockup.src}
             design={design}
+            design2={design2}
             frame={frame}
+            backFrame={backFrame}
             boxes={boxes}
             scale={scale}
             width={stageW}
