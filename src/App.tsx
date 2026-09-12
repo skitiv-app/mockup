@@ -47,6 +47,34 @@ const QUALITY: Record<"low" | "medium" | "high", { scale: number; jpeg: number }
   high: { scale: 1, jpeg: 0.92 },
 };
 
+type ReadyFolder = {
+  name: string;
+  dir: any;
+  frontHandle: any;
+  backHandle?: any;
+};
+
+type QueueTarget = {
+  mockupId: string;
+  shape: ShapeKey;
+  boxes: Box[];
+  frame: DesignFrame;
+};
+
+type QueueJob = {
+  id: string;
+  folderName: string;
+  dir: any;
+  frontHandle: any;
+  backHandle?: any;
+  targets: QueueTarget[];
+  backFrame: DesignFrame;
+  realism: number;
+  format: "jpeg" | "png";
+  quality: "low" | "medium" | "high";
+  groupName: string;
+};
+
 // Build a default placement box for a mockup + shape from the preset aspect ratio.
 function defaultBox(mockup: Mockup, preset: ShapePreset): Box {
   const ratio = preset.w / preset.h;
@@ -104,6 +132,11 @@ export default function App() {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [autoShapeNote, setAutoShapeNote] = useState<ShapeKey | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [readyFolders, setReadyFolders] = useState<ReadyFolder[]>([]);
+  const [readySummary, setReadySummary] = useState<{ total: number; completed: number; invalid: number } | null>(null);
+  const [activeReadyIndex, setActiveReadyIndex] = useState<number | null>(null);
+  const [queue, setQueue] = useState<QueueJob[]>([]);
+  const [queueProgress, setQueueProgress] = useState<string | null>(null);
 
   // Cloud (Supabase) wiring. When not configured, `supabase` is null and the
   // app falls back to local-only IndexedDB behaviour.
@@ -302,6 +335,7 @@ export default function App() {
     const file = files[0];
     const src = await readFileAsDataURL(file);
     const { width, height } = await getImageSize(src);
+    setActiveReadyIndex(null);
     setDesign({ src, width, height, name: file.name.replace(/\.[^.]+$/, "") });
     setSelected(new Set());
     setTwoSided(false);
@@ -362,6 +396,133 @@ export default function App() {
     }
   }
 
+  async function loadReadyFolder(index: number, folders = readyFolders) {
+    const item = folders[index];
+    if (!item) return;
+    const front = await readHandleAsDesign(item.frontHandle);
+    if (!front) {
+      flash(`Couldn't read the design in "${item.name}".`);
+      return;
+    }
+    const back = item.backHandle ? await readHandleAsDesign(item.backHandle) : null;
+    setExportDir(item.dir);
+    setExportDirName(item.name);
+    setDesign(front);
+    setDesign2(back);
+    setTwoSided(Boolean(back));
+    setDesignWarning(item.backHandle && !back ? 'Couldn\'t read "2.png".' : null);
+    setSelected(new Set());
+    const picked = pickShapeForRatio(front.width, front.height, presets);
+    setShape(picked);
+    setAutoShapeNote(picked);
+    if (back) setBackShape(pickShapeForRatio(back.width, back.height, presets));
+    setActiveReadyIndex(index);
+    setDesignChoices(null);
+    setShowStudio(true);
+    flash(`Ready folder ${index + 1} of ${folders.length}: ${item.name}`);
+  }
+
+  async function pickReadyFolder() {
+    const picker = (window as any).showDirectoryPicker;
+    if (!picker) {
+      flash("Ready queues need Chrome or Edge.");
+      return;
+    }
+    let root: any;
+    try {
+      root = await picker({ mode: "readwrite" });
+    } catch (e: any) {
+      if (e?.name !== "AbortError") flash("Couldn't open the Ready folder.");
+      return;
+    }
+
+    const pending: ReadyFolder[] = [];
+    let total = 0;
+    let completed = 0;
+    let invalid = 0;
+    try {
+      for await (const [, child] of root.entries()) {
+        if (child.kind !== "directory") continue;
+        total += 1;
+        const images: any[] = [];
+        let hasOutput = false;
+        for await (const [name, handle] of child.entries()) {
+          if (handle.kind !== "file") continue;
+          if (name === ".mockup-studio-complete.json" || /^group(?:[-_ ].*)?\.(?:png|jpe?g)$/i.test(name)) {
+            hasOutput = true;
+          }
+          if (/\.(png|jpe?g|webp|gif|avif)$/i.test(name)) images.push(handle);
+        }
+        if (hasOutput) {
+          completed += 1;
+          continue;
+        }
+        const front = images.find((h) => /^1\.(png|jpe?g|webp|gif|avif)$/i.test(h.name)) ?? images[0];
+        if (!front) {
+          invalid += 1;
+          continue;
+        }
+        const back = images.find((h) => /^2\.(png|jpe?g|webp|gif|avif)$/i.test(h.name));
+        pending.push({ name: child.name, dir: child, frontHandle: front, backHandle: back });
+      }
+    } catch {
+      flash("Couldn't scan that Ready folder.");
+      return;
+    }
+    pending.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    setReadyFolders(pending);
+    setReadySummary({ total, completed, invalid });
+    setQueue([]);
+    setActiveReadyIndex(null);
+    if (pending.length) {
+      await loadReadyFolder(0, pending);
+    } else {
+      flash(`Nothing pending — ${completed} completed folder${completed === 1 ? "" : "s"}.`);
+    }
+  }
+
+  function queueCurrentAndNext() {
+    if (!design || activeReadyIndex == null) return;
+    const item = readyFolders[activeReadyIndex];
+    if (!item) return;
+    const targets = mockups
+      .filter((m) => selected.has(m.id))
+      .map((m) => ({
+        mockupId: m.id,
+        shape: shapeFor(m.id),
+        boxes: boxesFor(m).map((box) => ({ ...box })),
+        frame: { ...frameFor(shapeFor(m.id)) },
+      }));
+    if (!targets.length) {
+      flash("Choose at least one mockup before queueing.");
+      return;
+    }
+    const job: QueueJob = {
+      id: item.name,
+      folderName: item.name,
+      dir: item.dir,
+      frontHandle: item.frontHandle,
+      backHandle: item.backHandle,
+      targets,
+      backFrame: { ...backFrameFor(backShape) },
+      realism: effRealism,
+      format,
+      quality,
+      groupName,
+    };
+    const nextQueue = [...queue.filter((q) => q.id !== job.id), job];
+    setQueue(nextQueue);
+    const nextIndex = readyFolders.findIndex(
+      (_, i) => i > activeReadyIndex && !nextQueue.some((q) => q.id === readyFolders[i].name)
+    );
+    if (nextIndex >= 0) {
+      void loadReadyFolder(nextIndex);
+    } else {
+      setShowStudio(false);
+      flash(`All pending folders prepared — ${nextQueue.length} queued.`);
+    }
+  }
+
   // Choose the design by its folder (the only way to know where to write
   // exports back to — browsers don't expose a file's parent directory).
   async function pickDesignFolder(mode: "single" | "double") {
@@ -379,6 +540,7 @@ export default function App() {
       if (e?.name !== "AbortError") flash("Couldn't open the folder.");
       return;
     }
+    setActiveReadyIndex(null);
     const images: any[] = [];
     try {
       for await (const [name, handle] of dir.entries()) {
@@ -802,6 +964,13 @@ export default function App() {
     setPresets((p) => ({ ...p, [key]: { ...p[key], ...patch } }));
   }
 
+  async function writeCompletionMarker(dir: any, imageCount: number) {
+    const marker = await dir.getFileHandle(".mockup-studio-complete.json", { create: true });
+    const writable = await marker.createWritable();
+    await writable.write(JSON.stringify({ completedAt: new Date().toISOString(), imageCount }, null, 2));
+    await writable.close();
+  }
+
   async function exportSelected() {
     if (!design) return;
     const targets = mockups.filter((m) => selected.has(m.id));
@@ -862,6 +1031,7 @@ export default function App() {
           await w.close();
           await delay(0); // let the browser breathe / GC between images
         }
+        await writeCompletionMarker(dir, total);
         flash(`Saved ${total} images to your folder ✓`);
       } else if (total === 1) {
         downloadBlob(await render1(targets[0]), nameAt(1));
@@ -892,6 +1062,75 @@ export default function App() {
         }).catch(() => {});
       }
     } finally {
+      setExporting(false);
+    }
+  }
+
+  async function exportQueue() {
+    if (!queue.length || exporting) return;
+    setExporting(true);
+    const succeeded = new Set<string>();
+    const failed: string[] = [];
+    let exportedImages = 0;
+    try {
+      for (let folderIndex = 0; folderIndex < queue.length; folderIndex += 1) {
+        const job = queue[folderIndex];
+        try {
+          if (!(await ensureDirAccess(job.dir))) throw new Error("Folder permission was not granted");
+          const front = await readHandleAsDesign(job.frontHandle);
+          if (!front) throw new Error("The design image could not be read");
+          const back = job.backHandle ? await readHandleAsDesign(job.backHandle) : null;
+          const q = QUALITY[job.quality];
+          const mime = job.format === "jpeg" ? "image/jpeg" : "image/png";
+          const ext = job.format === "jpeg" ? "jpg" : "png";
+          const base = (job.groupName.trim() || "group").replace(/[\\/:*?"<>|]+/g, "-");
+          const pad = String(job.targets.length).length;
+          for (let imageIndex = 0; imageIndex < job.targets.length; imageIndex += 1) {
+            const target = job.targets[imageIndex];
+            const mockup = mockups.find((m) => m.id === target.mockupId);
+            if (!mockup) throw new Error("A queued mockup is no longer available");
+            setQueueProgress(
+              `Folder ${folderIndex + 1}/${queue.length} · image ${imageIndex + 1}/${job.targets.length} · ${job.folderName}`
+            );
+            const blob = await renderMockup(mockup, target.boxes, front, {
+              realism: job.realism,
+              garment: mockup.tone ?? "light",
+              mime,
+              quality: q.jpeg,
+              outScale: q.scale,
+              frame: target.frame,
+              backDesign: mockup.twoSided && back ? back : undefined,
+              backFrame: job.backFrame,
+            });
+            const filename = `${base}-${String(imageIndex + 1).padStart(pad, "0")}.${ext}`;
+            const fileHandle = await job.dir.getFileHandle(filename, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            exportedImages += 1;
+            await delay(0);
+          }
+          await writeCompletionMarker(job.dir, job.targets.length);
+          succeeded.add(job.id);
+        } catch (e: any) {
+          console.error(`Queue export failed for ${job.folderName}`, e);
+          failed.push(job.folderName);
+        }
+      }
+      setQueue((items) => items.filter((item) => !succeeded.has(item.id)));
+      if (cloud && exportedImages) {
+        api("/api/log-export", {
+          method: "POST",
+          body: { count: exportedImages, format: "queue", quality: "mixed", email: user?.email },
+        }).catch(() => {});
+      }
+      if (failed.length) {
+        flash(`Finished with ${failed.length} failed folder${failed.length === 1 ? "" : "s"}; they remain queued.`);
+      } else {
+        flash(`Exported ${succeeded.size} folders · ${exportedImages} images ✓`);
+      }
+    } finally {
+      setQueueProgress(null);
       setExporting(false);
     }
   }
@@ -998,6 +1237,11 @@ export default function App() {
         <section className="panel">
           <h2>2 · Your design</h2>
           <div className="design-upload-actions">
+            {hasFolderApi && (
+              <button className="file-btn ready-folder-btn" onClick={pickReadyFolder}>
+                📚 Open Ready folder
+              </button>
+            )}
             {hasFolderApi ? (
               <button className="file-btn" onClick={() => pickDesignFolder("single")}>
                 1 sided folder
@@ -1020,6 +1264,14 @@ export default function App() {
               2 sided folder
             </button>
           </div>
+          {readySummary && (
+            <div className="ready-summary">
+              <b>{readySummary.total} folders</b>
+              <span>{readyFolders.length} pending</span>
+              <span>{readySummary.completed} completed</span>
+              {readySummary.invalid > 0 && <span>{readySummary.invalid} without a design</span>}
+            </div>
+          )}
           <p className="hint">
             Two-sided folders must contain <b>1.png</b> for the front and{" "}
             <b>2.png</b> for the back.
@@ -1254,13 +1506,49 @@ export default function App() {
             {exporting
               ? "Rendering…"
               : hasFolderApi
-              ? `Choose folder & save ${selectedCount} image${
+              ? `Export current · ${selectedCount} image${
                   selectedCount === 1 ? "" : "s"
                 }`
               : `Download ${selectedCount} image${
                   selectedCount === 1 ? "" : "s"
                 }`}
           </button>
+          {activeReadyIndex != null && (
+            <button
+              className="primary queue-next-btn"
+              disabled={!canExport}
+              onClick={queueCurrentAndNext}
+            >
+              Queue & next
+            </button>
+          )}
+          {queue.length > 0 && (
+            <div className="queue-box">
+              <div className="queue-head">
+                <b>Export queue ({queue.length})</b>
+                <span>{queue.reduce((n, job) => n + job.targets.length, 0)} images</span>
+              </div>
+              <div className="queue-list">
+                {queue.map((job) => (
+                  <div className="queue-item" key={job.id}>
+                    <span title={job.folderName}>{job.folderName}</span>
+                    <button
+                      className="icon-btn"
+                      disabled={exporting}
+                      title="Remove from queue"
+                      onClick={() => setQueue((items) => items.filter((item) => item.id !== job.id))}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {queueProgress && <p className="queue-progress">{queueProgress}</p>}
+              <button className="primary" disabled={exporting} onClick={exportQueue}>
+                {exporting ? "Exporting queue…" : `Export queue (${queue.length})`}
+              </button>
+            </div>
+          )}
           {hasFolderApi ? (
             <p className="hint">
               Pick a folder once — all ticked mockups save straight into it as
